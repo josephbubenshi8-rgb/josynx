@@ -223,17 +223,105 @@
   </section>
 
   <script>
-    function startBuilding() {
-      const idea = document.getElementById("idea").value.trim();
-      const message = document.getElementById("message");
+  async function startBuilding() {
+  const idea = document.getElementById("idea").value.trim();
+  const message = document.getElementById("message");
 
-      if (!idea) {
-        message.textContent = "Tell JOSYNX what you want to build first.";
-        return;
+  if (!idea) {
+    message.textContent = "Tell JOSYNX what you want to build first.";
+    return;
+  }
+
+  message.textContent = "🤖 JOSYNX is building your website...";
+
+  try {
+    const response = await fetch(
+      "https://josynx.onrender.com/api/generate",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          prompt: idea
+        })
       }
+    );
 
-      message.textContent =
-        "🚀 JOSYNX received your idea: " + idea;
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || "Generation failed.");
+    }
+
+    if (!data.html) {
+      throw new Error("JOSYNX received an empty website.");
+    }
+
+    showWebsitePreview(data.html);
+
+  } catch (error) {
+    console.error(error);
+
+    message.textContent =
+      "❌ JOSYNX couldn't build the website. Please try again.";
+  }function showWebsitePreview(html) {
+  const message = document.getElementById("message");
+
+  message.innerHTML = `
+    <div style="
+      margin-top:30px;
+      text-align:left;
+      background:#111118;
+      border:1px solid #30303a;
+      border-radius:16px;
+      padding:12px;
+    ">
+      <div style="
+        display:flex;
+        justify-content:space-between;
+        align-items:center;
+        padding:10px 8px 14px;
+      ">
+        <strong>🌐 Live Preview</strong>
+
+        <button
+          onclick="closePreview()"
+          style="
+            background:#292933;
+            color:white;
+            border:0;
+            padding:8px 14px;
+            border-radius:8px;
+          "
+        >
+          Close
+        </button>
+      </div>
+
+      <iframe
+        id="websitePreview"
+        style="
+          width:100%;
+          height:600px;
+          border:0;
+          border-radius:12px;
+          background:white;
+        "
+        sandbox="allow-scripts"
+      ></iframe>
+    </div>
+  `;
+
+  const iframe = document.getElementById("websitePreview");
+
+  iframe.srcdoc = html;
+}
+
+function closePreview() {
+  document.getElementById("message").innerHTML = "";
+    }
+    }
     }
   </script>
 
