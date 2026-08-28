@@ -261,10 +261,24 @@
     showWebsitePreview(data.html);
 
   } catch (error) {
-    console.error(error);
+  console.error("JOSYNX ERROR:", error);
 
-    message.textContent =
-      "❌ JOSYNX couldn't build the website. Please try again.";
+  message.innerHTML = `
+    <div style="
+      margin-top:20px;
+      padding:15px;
+      background:#24151a;
+      border:1px solid #7a303d;
+      border-radius:10px;
+      color:#ff9da9;
+      text-align:left;
+    ">
+      <strong>❌ JOSYNX couldn't build the website.</strong>
+      <br><br>
+      Error: ${error.message}
+    </div>
+  `;
+    }
   }function showWebsitePreview(html) {
   const message = document.getElementById("message");
  message.innerHTML = `
