@@ -12,7 +12,7 @@ const PORT = process.env.PORT || 10000;
 // ---------------------------------------------------------------------------
 
 // Which model to use. Override in Render env vars without redeploying code.
-const const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-5.6-luna";
+const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-5.6-luna";
 
 // GitHub Pages origin (and localhost, for testing on your own machine).
 const ALLOWED_ORIGINS = [
