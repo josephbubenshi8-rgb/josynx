@@ -1,342 +1,281 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>JOSYNX — AI Website Builder</title>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>JOSYNX — AI Website Builder</title>
+<style>
+  :root {
+    --bg: #0b0d12;
+    --card: #12151c;
+    --border: #232733;
+    --text: #f2f3f7;
+    --muted: #9aa0ad;
+    --accent: #6c5ce7;
+    --accent2: #00d2ff;
+    --danger: #ff5c5c;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: radial-gradient(circle at top, #171a22, var(--bg));
+    color: var(--text);
+  }
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 24px;
+  }
+  header .logo { font-weight: 700; font-size: 1.3rem; letter-spacing: 0.5px; }
+  header button {
+    background: var(--accent);
+    color: white;
+    border: none;
+    padding: 10px 18px;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  main { max-width: 900px; margin: 0 auto; padding: 40px 20px 80px; }
+  .badge {
+    display: inline-block;
+    background: rgba(108, 92, 231, 0.15);
+    color: var(--accent2);
+    padding: 6px 12px;
+    border-radius: 999px;
+    font-size: 0.85rem;
+    margin-bottom: 16px;
+  }
+  h1 { font-size: 2.4rem; margin: 0 0 12px; line-height: 1.2; }
+  p.lead { color: var(--muted); font-size: 1.05rem; margin-bottom: 32px; }
 
-  <style>
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
+  .builder {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 20px;
+    margin-bottom: 40px;
+  }
+  textarea {
+    width: 100%;
+    min-height: 90px;
+    background: #0e1016;
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    font-size: 1rem;
+    resize: vertical;
+    font-family: inherit;
+  }
+  .builder-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 14px;
+  }
+  #buildBtn {
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    color: white;
+    border: none;
+    padding: 12px 22px;
+    border-radius: 10px;
+    font-weight: 700;
+    font-size: 1rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  #buildBtn:disabled { opacity: 0.6; cursor: not-allowed; }
 
-    body {
-      font-family: Arial, sans-serif;
-      background: #0b0b0f;
-      color: white;
-      min-height: 100vh;
-    }
-
-    nav {
-      height: 70px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 0 7%;
-      border-bottom: 1px solid #22232a;
-    }
-
-    .logo {
-      font-size: 24px;
-      font-weight: 800;
-      letter-spacing: 2px;
-    }
-
-    .logo span {
-      color: #7c5cff;
-    }
-
-    .nav-button {
-      background: #7c5cff;
-      color: white;
-      border: none;
-      padding: 11px 20px;
-      border-radius: 8px;
-      font-weight: bold;
-    }
-
-    .hero {
-      max-width: 900px;
-      margin: auto;
-      text-align: center;
-      padding: 110px 20px 70px;
-    }
-
-    .badge {
-      display: inline-block;
-      padding: 8px 14px;
-      border: 1px solid #34343d;
-      border-radius: 30px;
-      color: #bdb7ff;
-      margin-bottom: 25px;
-      font-size: 14px;
-    }
-
-    h1 {
-      font-size: clamp(45px, 8vw, 82px);
-      line-height: 1;
-      margin-bottom: 25px;
-    }
-
-    h1 span {
-      color: #7c5cff;
-    }
-
-    .subtitle {
-      color: #aaaab5;
-      font-size: 19px;
-      line-height: 1.6;
-      max-width: 650px;
-      margin: auto;
-    }
-
-    .builder {
-      max-width: 750px;
-      margin: 45px auto 0;
-      background: #15151c;
-      border: 1px solid #2b2b35;
-      border-radius: 16px;
-      padding: 10px;
-      display: flex;
-      gap: 10px;
-    }
-
-    .builder input {
-      flex: 1;
-      background: transparent;
-      border: none;
-      outline: none;
-      color: white;
-      padding: 18px;
-      font-size: 16px;
-    }
-
-    .build-button {
-      background: #7c5cff;
-      color: white;
-      border: none;
-      border-radius: 10px;
-      padding: 0 24px;
-      font-weight: bold;
-      cursor: pointer;
-    }
-
-    .features {
-      max-width: 1000px;
-      margin: 30px auto 80px;
-      padding: 20px;
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 18px;
-    }
-
-    .feature {
-      background: #15151c;
-      border: 1px solid #292932;
-      border-radius: 14px;
-      padding: 25px;
-    }
-
-    .feature h3 {
-      margin-bottom: 10px;
-    }
-
-    .feature p {
-      color: #9999a5;
-      line-height: 1.5;
-    }
-
-    #message {
-      margin-top: 20px;
-      color: #a9a2ff;
-      min-height: 25px;
-    }
-
-    @media (max-width: 700px) {
-      .builder {
-        flex-direction: column;
-      }
-
-      .build-button {
-        height: 52px;
-      }
-
-      .features {
-        grid-template-columns: 1fr;
-      }
-    }
-  </style>
-</head>
-
-<body>
-
-  <nav>
-    <div class="logo">JO<span>SYNX</span></div>
-    <button class="nav-button">Get Started</button>
-  </nav>
-
-  <main class="hero">
-
-    <div class="badge">⚡ AI Website Builder</div>
-
-    <h1>
-      Imagine it.<br>
-      <span>Build it.</span>
-    </h1>
-
-    <p class="subtitle">
-      Turn your idea into a beautiful website with the power of AI.
-      Describe what you want and JOSYNX will help bring it to life.
-    </p>
-
-    <div class="builder">
-      <input
-        id="idea"
-        type="text"
-        placeholder="Describe the website you want..."
-      >
-
-      <button class="build-button" onclick="startBuilding()">
-        Build with AI →
-      </button>
-    </div>
-
-    <div id="message"></div>
-
-  </main>
-
-  <section class="features">
-
-    <div class="feature">
-      <h3>🤖 AI Generation</h3>
-      <p>
-        Describe your idea and JOSYNX will turn it into a website.
-      </p>
-    </div>
-
-    <div class="feature">
-      <h3>🎨 Easy Editing</h3>
-      <p>
-        Customize your website without needing to be an expert developer.
-      </p>
-    </div>
-
-    <div class="feature">
-      <h3>🚀 Publish</h3>
-      <p>
-        Preview your website and eventually publish it to the web.
-      </p>
-    </div>
-
-  </section>
-
-  <script>
-  async function startBuilding() {
-  const idea = document.getElementById("idea").value.trim();
-  const message = document.getElementById("message");
-
-  if (!idea) {
-    message.textContent = "Tell JOSYNX what you want to build first.";
-    return;
+  #status { margin-top: 14px; font-size: 0.95rem; color: var(--muted); min-height: 1.2em; }
+  #errorBox {
+    display: none;
+    margin-top: 14px;
+    background: rgba(255, 92, 92, 0.1);
+    border: 1px solid var(--danger);
+    color: #ffb3b3;
+    padding: 12px 14px;
+    border-radius: 10px;
+    font-size: 0.9rem;
+    white-space: pre-wrap;
   }
 
-  message.textContent = "🤖 JOSYNX is building your website...";
+  #previewWrap {
+    display: none;
+    margin-top: 24px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+  }
+  #previewBar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #0e1016;
+    padding: 10px 14px;
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+  #previewBar a { color: var(--accent2); text-decoration: none; }
+  iframe#preview {
+    width: 100%;
+    height: 70vh;
+    border: none;
+    background: white;
+    display: block;
+  }
 
-  try {
-    const response = await fetch(
-      "https://josynx.onrender.com/api/generate",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          prompt: idea
-        })
-      }
-    );
+  .features {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+  }
+  .features .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 18px;
+  }
+  .features h3 { margin: 0 0 8px; font-size: 1.05rem; }
+  .features p { margin: 0; color: var(--muted); font-size: 0.9rem; }
+</style>
+</head>
+<body>
 
-    const data = await response.json();
+<header>
+  <div class="logo">JOSYNX</div>
+  <button type="button">Get Started</button>
+</header>
 
-    if (!response.ok) {
-      throw new Error(data.error || "Generation failed.");
-    }
+<main>
+  <span class="badge">⚡ AI Website Builder</span>
+  <h1>Imagine it. Build it.</h1>
+  <p class="lead">Turn your idea into a beautiful website with the power of AI. Describe what you want and JOSYNX will help bring it to life.</p>
 
-    if (!data.html) {
-      throw new Error("JOSYNX received an empty website.");
-    }
-
-    showWebsitePreview(data.html);
-
-  } catch (error) {
-  console.error("JOSYNX ERROR:", error);
-
-  message.innerHTML = `
-    <div style="
-      margin-top:20px;
-      padding:15px;
-      background:#24151a;
-      border:1px solid #7a303d;
-      border-radius:10px;
-      color:#ff9da9;
-      text-align:left;
-    ">
-      <strong>❌ JOSYNX couldn't build the website.</strong>
-      <br><br>
-      Error: ${error.message}
+  <div class="builder">
+    <textarea id="promptInput" placeholder="e.g. Build me a modern restaurant website"></textarea>
+    <div class="builder-actions">
+      <button id="buildBtn" type="button">Build with AI →</button>
     </div>
-  `;
-    }
-  }function showWebsitePreview(html) {
-  const message = document.getElementById("message");
- message.innerHTML = `
-    <div style="
-      margin-top:30px;
-      text-align:left;
-      background:#111118;
-      border:1px solid #30303a;
-      border-radius:16px;
-      padding:12px;
-    ">
-      <div style="
-        display:flex;
-        justify-content:space-between;
-        align-items:center;
-        padding:10px 8px 14px;
-      ">
-        <strong>🌐 Live Preview</strong>
+    <div id="status"></div>
+    <div id="errorBox"></div>
 
-        <button
-          onclick="closePreview()"
-          style="
-            background:#292933;
-            color:white;
-            border:0;
-            padding:8px 14px;
-            border-radius:8px;
-          "
-        >
-          Close
-        </button>
+    <div id="previewWrap">
+      <div id="previewBar">
+        <span>Live preview</span>
+        <a id="openNewTab" href="#" target="_blank" rel="noopener">Open in new tab ↗</a>
       </div>
-
-      <iframe
-        id="websitePreview"
-        style="
-          width:100%;
-          height:600px;
-          border:0;
-          border-radius:12px;
-          background:white;
-        "
-        sandbox="allow-scripts"
-      ></iframe>
+      <iframe id="preview" title="Generated website preview" sandbox="allow-scripts allow-forms allow-popups allow-modals"></iframe>
     </div>
-  `;
+  </div>
 
-  const iframe = document.getElementById("websitePreview");
+  <div class="features">
+    <div class="card">
+      <h3>🤖 AI Generation</h3>
+      <p>Describe your idea and JOSYNX will turn it into a website.</p>
+    </div>
+    <div class="card">
+      <h3>🎨 Easy Editing</h3>
+      <p>Customize your website without needing to be an expert developer.</p>
+    </div>
+    <div class="card">
+      <h3>🚀 Publish</h3>
+      <p>Preview your website and eventually publish it to the web.</p>
+    </div>
+  </div>
+</main>
 
-  iframe.srcdoc = html;
-}
+<script>
+  // Backend base URL — change this if you ever move off Render.
+  const API_BASE = "https://josynx.onrender.com";
 
-function closePreview() {
-  document.getElementById("message").innerHTML = "";
+  const promptInput = document.getElementById("promptInput");
+  const buildBtn = document.getElementById("buildBtn");
+  const statusEl = document.getElementById("status");
+  const errorBox = document.getElementById("errorBox");
+  const previewWrap = document.getElementById("previewWrap");
+  const preview = document.getElementById("preview");
+  const openNewTab = document.getElementById("openNewTab");
+
+  function setStatus(msg) {
+    statusEl.textContent = msg || "";
+  }
+
+  function showError(msg) {
+    errorBox.textContent = msg;
+    errorBox.style.display = "block";
+  }
+
+  function clearError() {
+    errorBox.style.display = "none";
+    errorBox.textContent = "";
+  }
+
+  function showPreview(html) {
+    preview.srcdoc = html;
+    previewWrap.style.display = "block";
+
+    // "Open in new tab" via a blob URL so it works without a server.
+    const blob = new Blob([html], { type: "text/html" });
+    const blobUrl = URL.createObjectURL(blob);
+    openNewTab.href = blobUrl;
+  }
+
+  async function buildWithAI() {
+    const prompt = promptInput.value.trim();
+    clearError();
+
+    if (!prompt) {
+      showError("Please describe the website you want first.");
+      return;
     }
+
+    buildBtn.disabled = true;
+    previewWrap.style.display = "none";
+    setStatus("Generating your website… this can take up to a minute.");
+
+    try {
+      const response = await fetch(`${API_BASE}/api/generate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt })
+      });
+
+      let data;
+      try {
+        data = await response.json();
+      } catch {
+        throw new Error(`Server returned an unreadable response (HTTP ${response.status}).`);
+      }
+
+      if (!response.ok) {
+        const detail = data && (data.error || data.details);
+        throw new Error(detail || `Generation failed (HTTP ${response.status}).`);
+      }
+
+      if (!data.html) {
+        throw new Error("Server did not return any HTML to preview.");
+      }
+
+      setStatus("Done. Here's your generated website:");
+      showPreview(data.html);
+    } catch (err) {
+      setStatus("");
+      showError(
+        "Generation failed: " +
+        (err && err.message ? err.message : "Unknown error. Check your connection and try again.")
+      );
+    } finally {
+      buildBtn.disabled = false;
     }
-    }
-  </script>
+  }
+
+  buildBtn.addEventListener("click", buildWithAI);
+</script>
 
 </body>
   </html>
+  
