@@ -89,6 +89,17 @@ Rules:
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 90_000);
 
+  // Minimal, well-documented Responses API shape:
+  // top-level "instructions" for system-level guidance + a plain string "input"
+  // for the user turn. This avoids ambiguity around role-tagged input arrays,
+  // which some model families reject with a 400.
+  const requestBody = {
+    model: OPENAI_MODEL,
+    instructions: systemInstructions,
+    input: `Build a website for: ${prompt}`,
+    max_output_tokens: 8000
+  };
+
   try {
     const openaiResponse = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
@@ -96,13 +107,7 @@ Rules:
         "Content-Type": "application/json",
         Authorization: `Bearer ${process.env.OPENAI_API_KEY}`
       },
-      body: JSON.stringify({
-        model: OPENAI_MODEL,
-        input: [
-          { role: "system", content: systemInstructions },
-          { role: "user", content: `Build a website for: ${prompt}` }
-        ]
-      }),
+      body: JSON.stringify(requestBody),
       signal: controller.signal
     });
 
@@ -113,7 +118,7 @@ Rules:
     try {
       data = JSON.parse(raw);
     } catch (parseErr) {
-      console.error("OpenAI returned non-JSON response:", raw.slice(0, 500));
+      console.error("OPENAI request failed: non-JSON response —", raw.slice(0, 500));
       return res.status(502).json({
         error: "OpenAI returned an unreadable response.",
         details: raw.slice(0, 500)
@@ -121,20 +126,31 @@ Rules:
     }
 
     if (!openaiResponse.ok) {
-      console.error("OpenAI API error:", data);
+      const safeMessage = extractOpenAIErrorMessage(data);
+      const errType = data && data.error && typeof data.error === "object" ? data.error.type : undefined;
+      const errCode = data && data.error && typeof data.error === "object" ? data.error.code : undefined;
+
+      console.error(
+        `OPENAI request failed: [HTTP ${openaiResponse.status}] ${safeMessage} ` +
+        `(model: ${OPENAI_MODEL}${errType ? `, type: ${errType}` : ""}${errCode ? `, code: ${errCode}` : ""})`
+      );
+
       return res.status(502).json({
         error: "OpenAI API request failed.",
-        details: (data && data.error && data.error.message) || JSON.stringify(data)
+        details: `HTTP ${openaiResponse.status}: ${safeMessage}`,
+        type: errType || null,
+        code: errCode || null
       });
     }
 
     const html = extractHtml(data);
 
     if (!html) {
-      console.error("Could not extract HTML from OpenAI response:", JSON.stringify(data).slice(0, 500));
+      const preview = JSON.stringify(data).slice(0, 500);
+      console.error(`OPENAI request failed: response contained no extractable HTML — ${preview}`);
       return res.status(502).json({
         error: "OpenAI response did not contain any generated HTML.",
-        details: JSON.stringify(data).slice(0, 500)
+        details: preview
       });
     }
 
@@ -148,7 +164,7 @@ Rules:
       });
     }
 
-    console.error("Unexpected /api/generate error:", err);
+    console.error(`OPENAI request failed: ${err.name || "Error"} — ${err.message}`);
     return res.status(500).json({
       error: "Unexpected server error while generating the website.",
       details: err.message
@@ -164,6 +180,22 @@ app.use((req, res) => {
 // ---------------------------------------------------------------------------
 // HELPERS
 // ---------------------------------------------------------------------------
+
+// Safely extracts a human-readable message from an OpenAI error payload,
+// whatever shape it comes back in. Never touches process.env, so there is
+// no path by which this could leak the API key.
+function extractOpenAIErrorMessage(data) {
+  if (!data) return "No error body returned.";
+  if (typeof data.error === "string") return data.error;
+  if (data.error && typeof data.error === "object") {
+    return (
+      data.error.message ||
+      [data.error.type, data.error.code, data.error.param].filter(Boolean).join(" / ") ||
+      JSON.stringify(data.error)
+    );
+  }
+  return JSON.stringify(data).slice(0, 300);
+}
 
 // Pulls the model's text output out of a Responses API payload and strips
 // accidental markdown code fences if the model added them anyway.
@@ -205,4 +237,4 @@ function extractHtml(responseBody) {
 app.listen(PORT, () => {
   console.log(`JOSYNX backend running on port ${PORT}`);
 });
-      
+  
