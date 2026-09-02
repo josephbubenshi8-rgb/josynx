@@ -252,8 +252,15 @@
       }
 
       if (!response.ok) {
-        const detail = data && (data.error || data.details);
-        throw new Error(detail || `Generation failed (HTTP ${response.status}).`);
+        // Show BOTH the general error and the specific details from OpenAI,
+        // instead of just the generic top-level message.
+        const summary = data && data.error;
+        const detail = data && data.details;
+        const meta = data && (data.type || data.code)
+          ? `[${[data.type, data.code].filter(Boolean).join("/")}]`
+          : null;
+        const parts = [summary, detail, meta].filter(Boolean);
+        throw new Error(parts.length ? parts.join(" — ") : `Generation failed (HTTP ${response.status}).`);
       }
 
       if (!data.html) {
@@ -277,5 +284,5 @@
 </script>
 
 </body>
-  </html>
+        </html>
   
