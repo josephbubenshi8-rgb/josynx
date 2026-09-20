@@ -215,6 +215,15 @@
   .architecture-card strong { display:block; margin-bottom:4px; }
   .architecture-card small { color:var(--muted); line-height:1.4; }
   .architecture-empty { color:var(--muted); font-size:.84rem; }
+  .file-workspace { margin-top:14px; border:1px solid var(--border); border-radius:14px; padding:14px; background:#0e1219; }
+  .file-workspace-head { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:10px; }
+  .file-workspace-head h3 { margin:0; font-size:.95rem; }
+  .file-count { color:var(--muted); font-size:.78rem; }
+  .file-tree { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:8px; }
+  .file-item { border:1px solid var(--border); background:#11151d; color:var(--text); padding:10px; border-radius:9px; cursor:pointer; text-align:left; }
+  .file-item:hover, .file-item.active { background:#1a2030; border-color:#3a4050; }
+  .file-item strong { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .file-item small { color:var(--muted); display:block; margin-top:4px; }
   .features {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -275,6 +284,10 @@
       <div id="architecturePanel" class="architecture-panel">
         <div class="architecture-head"><h3>🗺️ Project Architecture</h3><span class="brain-subtitle">Pages, routes and shared structure</span></div>
         <div id="architectureContent" class="architecture-empty">Analyze the project to map its website architecture.</div>
+      </div>
+      <div class="file-workspace">
+        <div class="file-workspace-head"><h3>🗂️ Project Files</h3><span id="fileCount" class="file-count">No generated files yet</span></div>
+        <div id="fileTree" class="file-tree"><div class="architecture-empty">Build a multi-page project to create a real project file set.</div></div>
       </div>
     </div>
 
@@ -353,6 +366,8 @@
   let activeProjectBrain = null;
   let activeProjectArchitecture = null;
   let lastAgentChanges = [];
+  let activeProjectFiles = null;
+  let activeFilePath = null;
 
   const analyzeBtn = document.getElementById("analyzeBtn");
   const improveBtn = document.getElementById("improveBtn");
@@ -387,7 +402,10 @@
     activeProjectBrain = null;
     activeProjectArchitecture = null;
     lastAgentChanges = [];
+    activeProjectFiles = null;
+    activeFilePath = null;
     renderArchitecture(null);
+    renderProjectFiles(null);
     renderBrain(null);
     clearError();
     setStatus("New project started.");
@@ -397,6 +415,7 @@
   updateMemoryStatus();
   renderProjects();
   renderArchitecture(null);
+  renderProjectFiles(null);
 
   function loadProjects() {
     try {
@@ -440,7 +459,7 @@
     const suggested = promptInput.value.trim().replace(/\s+/g, " ").slice(0, 60) || "Untitled JOSYNX Project";
     const name = window.prompt("Project name:", suggested);
     if (!name) return;
-    const project = { name: name.trim().slice(0, 80) || "Untitled JOSYNX Project", html, memory: [...projectMemory], brain: activeProjectBrain ? JSON.parse(JSON.stringify(activeProjectBrain)) : null, architecture: activeProjectArchitecture ? JSON.parse(JSON.stringify(activeProjectArchitecture)) : null, updatedAt: Date.now() };
+    const project = { name: name.trim().slice(0, 80) || "Untitled JOSYNX Project", html, memory: [...projectMemory], brain: activeProjectBrain ? JSON.parse(JSON.stringify(activeProjectBrain)) : null, architecture: activeProjectArchitecture ? JSON.parse(JSON.stringify(activeProjectArchitecture)) : null, files: activeProjectFiles ? JSON.parse(JSON.stringify(activeProjectFiles)) : null, activeFile: activeFilePath || null, updatedAt: Date.now() };
     const existing = savedProjects.findIndex(p => p.name.toLowerCase() === project.name.toLowerCase());
     if (existing >= 0) savedProjects[existing] = project;
     else savedProjects.unshift(project);
@@ -476,6 +495,9 @@
       html: project.html,
       memory: Array.isArray(project.memory) ? [...project.memory] : [],
       brain: project.brain ? JSON.parse(JSON.stringify(project.brain)) : null,
+      architecture: project.architecture ? JSON.parse(JSON.stringify(project.architecture)) : null,
+      files: project.files ? JSON.parse(JSON.stringify(project.files)) : null,
+      activeFile: project.activeFile || null,
       updatedAt: Date.now()
     });
     savedProjects = savedProjects.slice(0, MAX_PROJECTS);
@@ -499,9 +521,14 @@
     currentProjectIndex = index;
     projectMemory = Array.isArray(project.memory) ? project.memory.slice(-MAX_MEMORY_ITEMS) : [];
     activeProjectBrain = project.brain ? JSON.parse(JSON.stringify(project.brain)) : null;
+    activeProjectArchitecture = project.architecture ? JSON.parse(JSON.stringify(project.architecture)) : null;
+    activeProjectFiles = project.files ? JSON.parse(JSON.stringify(project.files)) : null;
+    activeFilePath = project.activeFile || (activeProjectFiles && activeProjectFiles["index.html"] ? "index.html" : null);
     saveProjectMemory();
     showPreview(project.html);
     renderBrain(activeProjectBrain);
+    renderArchitecture(activeProjectArchitecture);
+    renderProjectFiles(activeProjectFiles);
     setStatus("Opened \"" + project.name + "\". You can continue building or editing it with AI.");
     editBtn.disabled = false;
   }
@@ -516,6 +543,42 @@
   function renderPills(items, emptyText) {
     if (!Array.isArray(items) || !items.length) return '<span class="brain-empty">' + escapeHtml(emptyText) + '</span>';
     return items.slice(0, 10).map(item => '<span class="brain-pill">' + escapeHtml(String(item)) + '</span>').join("");
+  }
+
+  function renderProjectFiles(files) {
+    const fileTree = document.getElementById("fileTree");
+    const fileCount = document.getElementById("fileCount");
+    if (!fileTree || !fileCount) return;
+    activeProjectFiles = files && typeof files === "object" ? files : null;
+    const entries = activeProjectFiles
+      ? Object.entries(activeProjectFiles).filter(([path, content]) => typeof path === "string" && typeof content === "string")
+      : [];
+    fileCount.textContent = entries.length ? entries.length + " file" + (entries.length === 1 ? "" : "s") : "No generated files yet";
+    if (!entries.length) {
+      fileTree.innerHTML = '<div class="architecture-empty">Build a multi-page project to create a real project file set.</div>';
+      return;
+    }
+    fileTree.innerHTML = entries.map(([path, content]) =>
+      '<button class="file-item ' + (path === activeFilePath ? 'active' : '') + '" type="button" data-file-path="' + escapeHtml(path) + '"><strong>📄 ' + escapeHtml(path) + '</strong><small>' + content.length.toLocaleString() + ' characters</small></button>'
+    ).join("");
+    fileTree.querySelectorAll("[data-file-path]").forEach(button => {
+      button.addEventListener("click", () => openProjectFile(button.dataset.filePath));
+    });
+  }
+
+  function openProjectFile(path) {
+    if (!activeProjectFiles || typeof activeProjectFiles[path] !== "string") return;
+    activeFilePath = path;
+    if (path.endsWith(".html")) {
+      showPreview(activeProjectFiles[path]);
+      setStatus('Previewing project file "' + path + '".');
+    } else {
+      const previewText = activeProjectFiles[path];
+      const escaped = escapeHtml(previewText);
+      showPreview('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>' + escapeHtml(path) + '</title><style>body{margin:0;background:#0b0d12;color:#f2f3f7;font-family:monospace;padding:18px;white-space:pre-wrap;overflow:auto}pre{margin:0}</style></head><body><pre>' + escaped + '</pre></body></html>');
+      setStatus('Viewing "' + path + '" from the project file workspace.');
+    }
+    renderProjectFiles(activeProjectFiles);
   }
 
   function renderBrain(brain) {
@@ -619,8 +682,10 @@
       if (!data.brain) throw new Error("JOSYNX did not return a Project Brain.");
       activeProjectBrain = data.brain;
       activeProjectArchitecture = data.architecture || activeProjectArchitecture;
+      activeProjectFiles = data.files && typeof data.files === "object" ? data.files : activeProjectFiles;
       lastAgentChanges = Array.isArray(data.changes) ? data.changes : [];
       renderArchitecture(activeProjectArchitecture);
+      renderProjectFiles(activeProjectFiles);
 
       if (data.html) showPreview(data.html);
 
@@ -628,6 +693,8 @@
         savedProjects[currentProjectIndex].html = data.html || html;
         savedProjects[currentProjectIndex].brain = JSON.parse(JSON.stringify(activeProjectBrain));
         savedProjects[currentProjectIndex].architecture = activeProjectArchitecture ? JSON.parse(JSON.stringify(activeProjectArchitecture)) : null;
+        savedProjects[currentProjectIndex].files = activeProjectFiles ? JSON.parse(JSON.stringify(activeProjectFiles)) : null;
+        savedProjects[currentProjectIndex].activeFile = activeFilePath || null;
         savedProjects[currentProjectIndex].memory = [...projectMemory];
         savedProjects[currentProjectIndex].updatedAt = Date.now();
         saveProjects();
@@ -686,6 +753,15 @@
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Multi-page generation failed.");
       if (!data.files || typeof data.files !== "object") throw new Error("JOSYNX did not return a valid project file set.");
+      activeProjectFiles = data.files;
+      activeFilePath = activeProjectFiles["index.html"] ? "index.html" : Object.keys(activeProjectFiles)[0] || null;
+      renderProjectFiles(activeProjectFiles);
+      if (currentProjectIndex !== null && savedProjects[currentProjectIndex]) {
+        savedProjects[currentProjectIndex].files = JSON.parse(JSON.stringify(activeProjectFiles));
+        savedProjects[currentProjectIndex].activeFile = activeFilePath;
+        savedProjects[currentProjectIndex].updatedAt = Date.now();
+        saveProjects();
+      }
       const zip = new JSZip();
       Object.entries(data.files).forEach(([path, content]) => {
         if (typeof path === "string" && typeof content === "string") zip.file(path, content);
@@ -698,7 +774,8 @@
       a.download = "josynx-multi-page-project.zip";
       a.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
-      setStatus("Multi-page project ZIP created successfully.");
+      if (activeFilePath && activeProjectFiles[activeFilePath]) showPreview(activeProjectFiles[activeFilePath]);
+      setStatus("Multi-page project created. Your files are now stored in the Project Files workspace and packaged as ZIP.");
     } catch (err) {
       showError(err.message || "Could not create the multi-page project.");
       setStatus("");
@@ -848,8 +925,13 @@
       showPreview(data.html);
       currentProjectIndex = null;
       activeProjectBrain = null;
+      activeProjectArchitecture = null;
+      activeProjectFiles = null;
+      activeFilePath = null;
       lastAgentChanges = [];
       renderBrain(null);
+      renderArchitecture(null);
+      renderProjectFiles(null);
       projectMemory.push(prompt.replace(/\s+/g, " ").trim().slice(0, MAX_MEMORY_ENTRY_LENGTH));
       projectMemory = projectMemory.slice(-MAX_MEMORY_ITEMS);
       saveProjectMemory();
@@ -921,6 +1003,9 @@
         savedProjects[currentProjectIndex].html = data.html;
         savedProjects[currentProjectIndex].memory = [...projectMemory];
         savedProjects[currentProjectIndex].brain = activeProjectBrain ? JSON.parse(JSON.stringify(activeProjectBrain)) : null;
+        savedProjects[currentProjectIndex].architecture = activeProjectArchitecture ? JSON.parse(JSON.stringify(activeProjectArchitecture)) : null;
+        savedProjects[currentProjectIndex].files = activeProjectFiles ? JSON.parse(JSON.stringify(activeProjectFiles)) : null;
+        savedProjects[currentProjectIndex].activeFile = activeFilePath || null;
         savedProjects[currentProjectIndex].updatedAt = Date.now();
         saveProjects();
         setStatus("Current project updated and saved automatically.");
