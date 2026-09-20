@@ -225,6 +225,18 @@
   .file-item strong { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .file-item small { color:var(--muted); display:block; margin-top:4px; }
 
+  .history-panel { margin-top:14px; border:1px solid var(--border); border-radius:14px; padding:14px; background:#0e1219; }
+  .history-head { display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:10px; }
+  .history-head h3 { margin:0; font-size:.95rem; }
+  .history-count { color:var(--muted); font-size:.78rem; }
+  .history-list { display:grid; gap:8px; }
+  .history-item { display:flex; justify-content:space-between; align-items:center; gap:10px; border:1px solid var(--border); border-radius:10px; padding:10px; background:#11151d; }
+  .history-meta { min-width:0; }
+  .history-label { display:block; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .history-time { display:block; color:var(--muted); font-size:.74rem; margin-top:3px; }
+  .history-restore { border:1px solid var(--border); background:#171b24; color:var(--text); padding:7px 10px; border-radius:8px; cursor:pointer; font-weight:700; white-space:nowrap; }
+  .history-restore:hover { background:#1c2230; }
+
   .validator-panel { margin-top:14px; border:1px solid var(--border); border-radius:14px; padding:14px; background:#0e1219; }
   .validator-head { display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:10px; }
   .validator-head h3 { margin:0; font-size:.95rem; }
@@ -306,6 +318,14 @@
         <div id="architectureContent" class="architecture-empty">Analyze the project to map its website architecture.</div>
       </div>
 
+      <div class="history-panel">
+        <div class="history-head">
+          <div><h3>🕘 Version History</h3><div class="brain-subtitle">Restore any recent project version — up to 8 snapshots.</div></div>
+          <span id="historyCount" class="history-count">No saved versions</span>
+        </div>
+        <div id="historyList" class="history-list"><div class="architecture-empty">Your recent changes will appear here.</div></div>
+      </div>
+
       <div class="validator-panel">
         <div class="validator-head">
           <div><h3>🛡️ Project Validator</h3><div class="brain-subtitle">Check your project before exporting: links, files, IDs, navigation and basic mobile readiness.</div></div>
@@ -384,6 +404,8 @@
   const projectList = document.getElementById("projectList");
   const saveProjectBtn = document.getElementById("saveProjectBtn");
   const newProjectBtn = document.getElementById("newProjectBtn");
+  const historyList = document.getElementById("historyList");
+  const historyCount = document.getElementById("historyCount");
   const MEMORY_KEY = "josynx_project_memory";
   const PROJECTS_KEY = "josynx_projects";
   const MAX_PROJECTS = 10;
@@ -996,6 +1018,63 @@
     }
   }
 
+  function renderHistory() {
+    if (!historyList || !historyCount) return;
+    if (!snapshotHistory.length) {
+      historyCount.textContent = "No saved versions";
+      historyList.innerHTML = '<div class="architecture-empty">Your recent changes will appear here.</div>';
+      return;
+    }
+    historyCount.textContent = snapshotHistory.length + " version" + (snapshotHistory.length === 1 ? "" : "s") + " saved";
+    historyList.innerHTML = snapshotHistory.slice().reverse().map(item => {
+      const originalIndex = snapshotHistory.indexOf(item);
+      const safeLabel = String(item.label || "Previous version").replace(/[&<>"]/g, ch => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[ch]));
+      const time = item.timestamp ? new Date(item.timestamp).toLocaleString() : "Unknown time";
+      return '<div class="history-item"><div class="history-meta"><span class="history-label">' + safeLabel + '</span><span class="history-time">' + time + '</span></div><button class="history-restore" type="button" data-history-index="' + originalIndex + '">Restore</button></div>';
+    }).join("");
+    historyList.querySelectorAll(".history-restore").forEach(button => {
+      button.addEventListener("click", () => restoreHistoryVersion(Number(button.dataset.historyIndex)));
+    });
+  }
+
+  function restoreHistoryVersion(index) {
+    if (!Number.isInteger(index) || !snapshotHistory[index]) {
+      showError("That version is no longer available.");
+      return;
+    }
+    const target = snapshotHistory[index];
+    const html = target.html || (target.activeFile && target.files && target.files[target.activeFile]) || (target.files && target.files["index.html"]) || "";
+    activeProjectFiles = target.files ? JSON.parse(JSON.stringify(target.files)) : null;
+    activeFilePath = target.activeFile || null;
+    activeProjectBrain = target.brain ? JSON.parse(JSON.stringify(target.brain)) : null;
+    activeProjectArchitecture = target.architecture ? JSON.parse(JSON.stringify(target.architecture)) : null;
+    projectMemory = [...(target.memory || [])];
+    saveProjectMemory();
+    if (activeProjectFiles) renderProjectFiles(activeProjectFiles); else renderProjectFiles(null);
+    renderBrain(activeProjectBrain);
+    renderArchitecture(activeProjectArchitecture);
+    if (html) showPreview(html);
+    if (currentProjectIndex !== null && savedProjects[currentProjectIndex]) {
+      savedProjects[currentProjectIndex].html = html;
+      savedProjects[currentProjectIndex].memory = [...projectMemory];
+      savedProjects[currentProjectIndex].brain = activeProjectBrain ? JSON.parse(JSON.stringify(activeProjectBrain)) : null;
+      savedProjects[currentProjectIndex].architecture = activeProjectArchitecture ? JSON.parse(JSON.stringify(activeProjectArchitecture)) : null;
+      savedProjects[currentProjectIndex].files = activeProjectFiles ? JSON.parse(JSON.stringify(activeProjectFiles)) : null;
+      savedProjects[currentProjectIndex].activeFile = activeFilePath || null;
+      savedProjects[currentProjectIndex].updatedAt = Date.now();
+      saveProjects();
+    }
+    snapshotHistory = snapshotHistory.slice(0, index + 1);
+    lastSnapshot = snapshotHistory.length ? snapshotHistory[snapshotHistory.length - 1] : null;
+    if (validatorContent) validatorContent.innerHTML = '<div class="architecture-empty">Version restored. Validate the project again to check it.</div>';
+    if (validateBtn) validateBtn.disabled = !html;
+    if (autoFixBtn) autoFixBtn.disabled = true;
+    undoBtn.disabled = !lastSnapshot;
+    renderHistory();
+    clearError();
+    setStatus("🕘 Restored version: " + (target.label || "Previous version"));
+  }
+
   function captureSnapshot(label) {
     const html = getCurrentHtml();
     if (!html && !activeProjectFiles) return;
@@ -1012,6 +1091,7 @@
     snapshotHistory.push(lastSnapshot);
     snapshotHistory = snapshotHistory.slice(-MAX_SNAPSHOT_HISTORY);
     undoBtn.disabled = false;
+    renderHistory();
   }
 
   function undoLastChange() {
@@ -1051,6 +1131,7 @@
     if (autoFixBtn) autoFixBtn.disabled = true;
     setStatus("↩️ Restored the previous version: " + snapshot.label);
     undoBtn.disabled = !lastSnapshot;
+    renderHistory();
   }
 
   function setStatus(msg) {
@@ -1405,6 +1486,7 @@
   validateBtn.addEventListener("click", validateProject);
   autoFixBtn.addEventListener("click", autoFixValidation);
   undoBtn.addEventListener("click", undoLastChange);
+  renderHistory();
   promptInput.addEventListener("keydown", (event) => {
     if ((event.ctrlKey || event.metaKey) && event.key === "Enter") buildWithAI();
   });
