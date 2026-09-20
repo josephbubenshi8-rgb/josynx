@@ -151,7 +151,8 @@ app.post("/api/agent", async (req, res) => {
   if (task.length > MAX_PROMPT_LENGTH) return res.status(413).json({ error: "Agent task is too long." });
   if (!process.env.GEMINI_API_KEY) return res.status(500).json({ error: "Server misconfiguration: GEMINI_API_KEY is not set." });
 
-  const mode = task === "MAKE_BETTER" ? "MAKE_BETTER" : "ANALYZE";
+  const mode = task === "MAKE_BETTER" ? "MAKE_BETTER" : task === "ANALYZE" ? "ANALYZE" : "CUSTOM";
+  const customTask = mode === "CUSTOM" ? task : "";
   const systemInstructions = `
 You are JOSYNX Project Agent, an AI website development partner.
 
@@ -180,6 +181,7 @@ Required JSON shape:
 }
 
 Mode: ${mode}.
+${customTask ? "User's Agent command: " + customTask : ""}
 
 If mode is ANALYZE:
 - Do NOT change the website. Return the original HTML unchanged.
@@ -195,6 +197,18 @@ If mode is MAKE_BETTER:
 - Keep all CSS and JavaScript inline and keep the document standalone.
 - Return the fully updated HTML.
 - Report the actual changes in "changes".
+
+If mode is CUSTOM:
+- Treat the user's Agent command as a direct development task for the current website.
+- Understand the existing website before changing it.
+- Make the requested feature or change directly in the existing HTML.
+- If the request implies multiple connected changes, implement all of them coherently.
+- Preserve unrelated content and working functionality.
+- Do not merely describe what should be done; actually implement it.
+- Do not invent sensitive business facts, fake testimonials, fake statistics, fake credentials, or fake integrations.
+- If a requested backend or external service cannot truly be implemented inside a standalone HTML document, create the best functional frontend experience possible without pretending that a real service exists.
+- Keep the website standalone with inline CSS and JavaScript and no external dependencies.
+- Report the concrete changes you actually made in "changes".
 
 Existing Project Brain (may be null):
 ${JSON.stringify(brain || null)}
