@@ -282,7 +282,7 @@
     <textarea id="promptInput" placeholder="e.g. Build me a modern restaurant website"></textarea>
     <div class="builder-actions">
       <button id="buildBtn" type="button">Build with AI →</button>
-      <button id="editBtn" type="button" class="edit-btn" disabled>✏️ Edit Current Site</button>
+      <button id="editBtn" type="button" class="edit-btn" disabled>✏️ Edit Current Site</button><button id="undoBtn" type="button" class="edit-btn" disabled>↩️ Undo Last Change</button>
     </div>
     <div id="status"></div>
     <div id="memoryStatus" style="margin-top:8px;font-size:0.82rem;color:var(--muted);"></div>
@@ -398,7 +398,9 @@
   let activeProjectFiles = null;
   let activeFilePath = null;
   let lastValidation = null;
+  let lastSnapshot = null;
   const autoFixBtn = document.getElementById("autoFixBtn");
+  const undoBtn = document.getElementById("undoBtn");
 
   const analyzeBtn = document.getElementById("analyzeBtn");
   const improveBtn = document.getElementById("improveBtn");
@@ -434,6 +436,8 @@
     promptInput.value = "";
     previewWrap.style.display = "none";
     currentProjectIndex = null;
+    lastSnapshot = null;
+    undoBtn.disabled = true;
     activeProjectBrain = null;
     activeProjectArchitecture = null;
     lastAgentChanges = [];
@@ -694,6 +698,7 @@
       }
     }
 
+    captureSnapshot(task === "MAKE_BETTER" ? "Before Make It Better" : task === "CUSTOM" ? "Before Agent change" : "Before Project Brain update");
     analyzeBtn.disabled = true;
     improveBtn.disabled = true;
     agentBtn.disabled = true;
@@ -911,6 +916,7 @@
       (item.file ? item.file + ": " : "") + item.message
     ).join("\n");
 
+    captureSnapshot("Before Validator Auto-Fix");
     autoFixBtn.disabled = true;
     validateBtn.disabled = true;
     setStatus("🛠️ JOSYNX Agent is fixing the validator issues…");
@@ -985,6 +991,60 @@
       validateBtn.disabled = !getCurrentHtml();
       autoFixBtn.disabled = !(lastValidation && (lastValidation.errors || lastValidation.warnings));
     }
+  }
+
+  function captureSnapshot(label) {
+    const html = getCurrentHtml();
+    if (!html && !activeProjectFiles) return;
+    lastSnapshot = {
+      label: label || "Previous version",
+      html,
+      files: activeProjectFiles ? JSON.parse(JSON.stringify(activeProjectFiles)) : null,
+      activeFile: activeFilePath || null,
+      brain: activeProjectBrain ? JSON.parse(JSON.stringify(activeProjectBrain)) : null,
+      architecture: activeProjectArchitecture ? JSON.parse(JSON.stringify(activeProjectArchitecture)) : null,
+      memory: [...projectMemory],
+      timestamp: Date.now()
+    };
+    undoBtn.disabled = false;
+  }
+
+  function undoLastChange() {
+    if (!lastSnapshot) {
+      showError("There is no previous version to restore yet.");
+      return;
+    }
+    const snapshot = lastSnapshot;
+    lastSnapshot = null;
+    activeProjectFiles = snapshot.files ? JSON.parse(JSON.stringify(snapshot.files)) : null;
+    activeFilePath = snapshot.activeFile || null;
+    activeProjectBrain = snapshot.brain ? JSON.parse(JSON.stringify(snapshot.brain)) : null;
+    activeProjectArchitecture = snapshot.architecture ? JSON.parse(JSON.stringify(snapshot.architecture)) : null;
+    projectMemory = [...(snapshot.memory || [])];
+    saveProjectMemory();
+
+    const html = snapshot.html || (activeFilePath && activeProjectFiles && activeProjectFiles[activeFilePath]) || (activeProjectFiles && activeProjectFiles["index.html"]) || "";
+    if (activeProjectFiles) renderProjectFiles(activeProjectFiles);
+    else renderProjectFiles(null);
+    renderBrain(activeProjectBrain);
+    renderArchitecture(activeProjectArchitecture);
+    if (html) showPreview(html);
+
+    if (currentProjectIndex !== null && savedProjects[currentProjectIndex]) {
+      savedProjects[currentProjectIndex].html = html;
+      savedProjects[currentProjectIndex].memory = [...projectMemory];
+      savedProjects[currentProjectIndex].brain = activeProjectBrain ? JSON.parse(JSON.stringify(activeProjectBrain)) : null;
+      savedProjects[currentProjectIndex].architecture = activeProjectArchitecture ? JSON.parse(JSON.stringify(activeProjectArchitecture)) : null;
+      savedProjects[currentProjectIndex].files = activeProjectFiles ? JSON.parse(JSON.stringify(activeProjectFiles)) : null;
+      savedProjects[currentProjectIndex].activeFile = activeFilePath || null;
+      savedProjects[currentProjectIndex].updatedAt = Date.now();
+      saveProjects();
+    }
+    if (validatorContent) validatorContent.innerHTML = '<div class="architecture-empty">Version restored. Validate the project again to check it.</div>';
+    if (validateBtn) validateBtn.disabled = !html;
+    if (autoFixBtn) autoFixBtn.disabled = true;
+    setStatus("↩️ Restored the previous version: " + snapshot.label);
+    undoBtn.disabled = true;
   }
 
   function setStatus(msg) {
@@ -1197,6 +1257,8 @@
       setStatus(projectMemory.length ? "Updated your existing project with the latest instruction." : "Done. Your project has been started.");
       showPreview(data.html);
       currentProjectIndex = null;
+      lastSnapshot = null;
+      undoBtn.disabled = true;
       activeProjectBrain = null;
       activeProjectArchitecture = null;
       activeProjectFiles = null;
@@ -1239,6 +1301,7 @@
       return;
     }
 
+    captureSnapshot("Before Edit Current Site");
     buildBtn.disabled = true;
     editBtn.disabled = true;
     setStatus("Editing your current website… this can take up to a minute.");
@@ -1334,6 +1397,7 @@
   newProjectBtn.addEventListener("click", clearProjectMemory);
   validateBtn.addEventListener("click", validateProject);
   autoFixBtn.addEventListener("click", autoFixValidation);
+  undoBtn.addEventListener("click", undoLastChange);
   promptInput.addEventListener("keydown", (event) => {
     if ((event.ctrlKey || event.metaKey) && event.key === "Enter") buildWithAI();
   });
