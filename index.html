@@ -147,7 +147,7 @@
 
 <header>
   <div class="logo">JOSYNX</div>
-  <button type="button">Get Started</button>
+  <button type="button">New Project</button>
 </header>
 
 <main>
@@ -161,6 +161,7 @@
       <button id="buildBtn" type="button">Build with AI →</button>
     </div>
     <div id="status"></div>
+    <div id="memoryStatus" style="margin-top:8px;font-size:0.82rem;color:var(--muted);"></div>
     <div id="errorBox"></div>
 
     <div id="previewWrap">
@@ -199,6 +200,43 @@
   const previewWrap = document.getElementById("previewWrap");
   const preview = document.getElementById("preview");
   const openNewTab = document.getElementById("openNewTab");
+  const memoryStatus = document.getElementById("memoryStatus");
+  const newProjectBtn = document.getElementById("newProjectBtn");
+  const MEMORY_KEY = "josynx_project_memory";
+  const MAX_MEMORY_ITEMS = 6;
+  const MAX_MEMORY_ENTRY_LENGTH = 500;
+  let projectMemory = loadProjectMemory();
+
+  function loadProjectMemory() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(MEMORY_KEY) || "[]");
+      return Array.isArray(saved) ? saved.filter(item => typeof item === "string").slice(-MAX_MEMORY_ITEMS) : [];
+    } catch { return []; }
+  }
+
+  function updateMemoryStatus() {
+    memoryStatus.textContent = projectMemory.length
+      ? "Project memory: " + projectMemory.length + " instruction" + (projectMemory.length === 1 ? "" : "s") + " saved on this device."
+      : "Project memory: empty — your next prompt starts a new project.";
+  }
+
+  function saveProjectMemory() {
+    try { localStorage.setItem(MEMORY_KEY, JSON.stringify(projectMemory)); } catch {}
+    updateMemoryStatus();
+  }
+
+  function clearProjectMemory() {
+    projectMemory = [];
+    try { localStorage.removeItem(MEMORY_KEY); } catch {}
+    promptInput.value = "";
+    previewWrap.style.display = "none";
+    clearError();
+    setStatus("New project started.");
+    updateMemoryStatus();
+  }
+
+  updateMemoryStatus();
+
 
   function setStatus(msg) {
     statusEl.textContent = msg || "";
