@@ -215,6 +215,15 @@
   .architecture-card strong { display:block; margin-bottom:4px; }
   .architecture-card small { color:var(--muted); line-height:1.4; }
   .architecture-empty { color:var(--muted); font-size:.84rem; }
+  .file-search { display:flex; gap:8px; margin-bottom:10px; }
+  .file-search input { flex:1; min-width:0; background:#0e1016; color:var(--text); border:1px solid var(--border); border-radius:9px; padding:9px 11px; font:inherit; }
+  .file-search input:focus { outline:none; border-color:#3a4050; }
+  .file-search-clear { border:1px solid var(--border); background:#171b24; color:var(--text); padding:8px 11px; border-radius:8px; cursor:pointer; font-weight:700; }
+  .file-search-clear:hover { background:#1c2230; }
+  .file-search-result { border:1px solid var(--border); border-radius:9px; padding:9px 10px; background:#10141c; margin-top:8px; font-size:.82rem; }
+  .file-search-result strong { display:block; }
+  .file-search-result small { color:var(--muted); display:block; margin-top:3px; }
+  .file-search-match { color:var(--accent2); }
   .file-workspace { margin-top:14px; border:1px solid var(--border); border-radius:14px; padding:14px; background:#0e1219; }
   .file-workspace-head { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:10px; }
   .file-workspace-head h3 { margin:0; font-size:.95rem; }
@@ -336,6 +345,11 @@
 
       <div class="file-workspace">
         <div class="file-workspace-head"><h3>🗂️ Project Files</h3><span id="fileCount" class="file-count">No generated files yet</span></div><div id="fileSelectionStatus" class="file-count" style="margin:-2px 0 10px;">No file selected — the Agent can work across the whole project.</div>
+        <div class="file-search">
+          <input id="fileSearchInput" type="search" placeholder="🔍 Search files and project code…" autocomplete="off" />
+          <button id="fileSearchClear" class="file-search-clear" type="button">Clear</button>
+        </div>
+        <div id="fileSearchResults"></div>
         <div id="fileTree" class="file-tree"><div class="architecture-empty">Build a multi-page project to create a real project file set.</div></div>
       </div>
     </div>
@@ -406,6 +420,9 @@
   const newProjectBtn = document.getElementById("newProjectBtn");
   const historyList = document.getElementById("historyList");
   const historyCount = document.getElementById("historyCount");
+  const fileSearchInput = document.getElementById("fileSearchInput");
+  const fileSearchClear = document.getElementById("fileSearchClear");
+  const fileSearchResults = document.getElementById("fileSearchResults");
   const MEMORY_KEY = "josynx_project_memory";
   const PROJECTS_KEY = "josynx_projects";
   const MAX_PROJECTS = 10;
@@ -610,6 +627,40 @@
   function renderPills(items, emptyText) {
     if (!Array.isArray(items) || !items.length) return '<span class="brain-empty">' + escapeHtml(emptyText) + '</span>';
     return items.slice(0, 10).map(item => '<span class="brain-pill">' + escapeHtml(String(item)) + '</span>').join("");
+  }
+
+  function searchProjectFiles(query) {
+    if (!fileSearchResults) return;
+    const q = String(query || "").trim().toLowerCase();
+    if (!q) {
+      fileSearchResults.innerHTML = "";
+      return;
+    }
+    const files = activeProjectFiles || {};
+    const matches = Object.entries(files).filter(([path, content]) => {
+      return String(path).toLowerCase().includes(q) || String(content).toLowerCase().includes(q);
+    }).slice(0, 20);
+    if (!matches.length) {
+      fileSearchResults.innerHTML = '<div class="architecture-empty">No matching files or code found.</div>';
+      return;
+    }
+    fileSearchResults.innerHTML = matches.map(([path, content]) => {
+      const lower = String(content).toLowerCase();
+      const index = lower.indexOf(q);
+      const start = index >= 0 ? Math.max(0, index - 45) : 0;
+      const end = index >= 0 ? Math.min(String(content).length, index + q.length + 75) : 120;
+      const snippet = String(content).slice(start, end).replace(/\s+/g, " ");
+      const safePath = path.replace(/[&<>"]/g, ch => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[ch]));
+      const safeSnippet = snippet.replace(/[&<>"]/g, ch => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[ch]));
+      return '<button type="button" class="file-search-result" data-search-path="' + safePath + '"><strong>' + safePath + '</strong><small>' + safeSnippet + '</small></button>';
+    }).join("");
+    fileSearchResults.querySelectorAll("[data-search-path]").forEach(button => {
+      button.addEventListener("click", () => {
+        openProjectFile(button.dataset.searchPath);
+        const target = document.querySelector('.file-item[data-file-path="' + CSS.escape(button.dataset.searchPath) + '"]');
+        if (target) target.scrollIntoView({ behavior:"smooth", block:"center" });
+      });
+    });
   }
 
   function renderProjectFiles(files) {
@@ -1486,6 +1537,8 @@
   validateBtn.addEventListener("click", validateProject);
   autoFixBtn.addEventListener("click", autoFixValidation);
   undoBtn.addEventListener("click", undoLastChange);
+  if (fileSearchInput) fileSearchInput.addEventListener("input", () => searchProjectFiles(fileSearchInput.value));
+  if (fileSearchClear) fileSearchClear.addEventListener("click", () => { fileSearchInput.value = ""; searchProjectFiles(""); fileSearchInput.focus(); });
   renderHistory();
   promptInput.addEventListener("keydown", (event) => {
     if ((event.ctrlKey || event.metaKey) && event.key === "Enter") buildWithAI();
