@@ -294,6 +294,72 @@ Architecture rules:
   }
 });
 
+
+app.post("/api/multipage", async (req, res) => {
+  const html = req.body && typeof req.body.html === "string" ? req.body.html.trim() : "";
+  const architecture = req.body && req.body.architecture && typeof req.body.architecture === "object" ? req.body.architecture : null;
+  const brain = req.body && req.body.brain && typeof req.body.brain === "object" ? req.body.brain : null;
+  if (!html) return res.status(400).json({ error: "Missing 'html'." });
+  if (!architecture || !Array.isArray(architecture.pages) || architecture.pages.length < 2) return res.status(400).json({ error: "A multi-page architecture with at least two pages is required." });
+  if (html.length > 150000) return res.status(413).json({ error: "Website HTML is too large for multi-page generation." });
+  if (!process.env.GEMINI_API_KEY) return res.status(500).json({ error: "Server misconfiguration: GEMINI_API_KEY is not set." });
+
+  const systemInstructions = `
+You are JOSYNX Multi-Page Project Builder.
+Return ONLY valid JSON in this exact shape:
+{"files":{"index.html":"...","about.html":"...","styles.css":"...","app.js":"..."}}
+
+Create a coherent multi-page static website from the supplied single-page HTML and architecture.
+Rules:
+- Include every page in architecture.pages.
+- Use clean .html page files plus shared styles.css and app.js when useful.
+- Every page must link correctly to the other pages using relative paths.
+- Preserve the existing site's brand, content, visual identity and useful functionality.
+- Do not invent sensitive facts, fake testimonials, statistics, credentials, or real integrations.
+- No CDNs, external images, remote dependencies, or external files.
+- Shared CSS goes in styles.css; shared JavaScript goes in app.js.
+- Keep every page responsive and functional.
+- Return only files that are needed.
+`;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 90000);
+  try {
+    const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`, {
+      method:"POST",
+      headers:{"Content-Type":"application/json","x-goog-api-key":process.env.GEMINI_API_KEY},
+      body:JSON.stringify({
+        systemInstruction:{parts:[{text:systemInstructions}]},
+        contents:[{role:"user",parts:[{text:
+          "CURRENT WEBSITE HTML:\\n\\n"+html+
+          "\\n\\nPROJECT ARCHITECTURE:\\n"+JSON.stringify(architecture)+
+          "\\n\\nPROJECT BRAIN:\\n"+JSON.stringify(brain||null)}]}],
+        generationConfig:{temperature:0.45,maxOutputTokens:18000}
+      }),
+      signal:controller.signal
+    });
+    clearTimeout(timeout);
+    const raw=await geminiResponse.text();
+    let data; try { data=JSON.parse(raw); } catch { return res.status(502).json({error:"Gemini returned an unreadable response."}); }
+    if(!geminiResponse.ok) {
+      const message=data&&data.error&&data.error.message?data.error.message:"Gemini API request failed.";
+      return res.status(502).json({error:"Gemini API request failed.",details:message,type:data&&data.error&&data.error.status?data.error.status:null});
+    }
+    const result=extractJson(data);
+    if(!result || !result.files || typeof result.files!=="object") return res.status(502).json({error:"Gemini did not return a valid multi-page file set."});
+    const files={};
+    for(const [path,content] of Object.entries(result.files)) {
+      if(typeof path==="string" && typeof content==="string" && path.length<=120 && content.length<=150000) files[path]=content;
+    }
+    if(!files["index.html"]) return res.status(502).json({error:"Multi-page project is missing index.html."});
+    return res.json({files});
+  } catch(err) {
+    clearTimeout(timeout);
+    if(err.name==="AbortError") return res.status(504).json({error:"Multi-page generation timed out after 90 seconds."});
+    return res.status(500).json({error:"Unexpected server error in multi-page generation.",details:err.message});
+  }
+});
+
 app.post("/api/generate", async (req, res) => {
   const prompt =
     req.body &&
