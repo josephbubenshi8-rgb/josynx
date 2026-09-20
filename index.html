@@ -90,6 +90,15 @@
   }
   #buildBtn:disabled { opacity: 0.6; cursor: not-allowed; }
 
+  .workspace { display:grid; gap:16px; margin-bottom:24px; }
+  .projects-panel { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:18px; }
+  .projects-head { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px; }
+  .projects-head h2 { margin:0; font-size:1.05rem; }
+  .project-list { display:grid; gap:8px; }
+  .project-item { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 12px; border:1px solid var(--border); border-radius:10px; background:#0e1016; }
+  .project-item button { border:0; background:transparent; color:var(--text); text-align:left; cursor:pointer; font:inherit; flex:1; }
+  .project-item small { color:var(--muted); white-space:nowrap; }
+  .project-empty { color:var(--muted); font-size:.9rem; }
   #status { margin-top: 14px; font-size: 0.95rem; color: var(--muted); min-height: 1.2em; }
   #errorBox {
     display: none;
@@ -147,13 +156,20 @@
 
 <header>
   <div class="logo">JOSYNX</div>
-  <button type="button">New Project</button>
+  <button id="newProjectBtn" type="button">New Project</button>
 </header>
 
 <main>
   <span class="badge">⚡ AI Website Builder</span>
   <h1>Imagine it. Build it.</h1>
   <p class="lead">Turn your idea into a beautiful website with the power of AI. Describe what you want and JOSYNX will help bring it to life.</p>
+
+  <div class="workspace">
+    <div class="projects-panel">
+      <div class="projects-head"><h2>📂 My Projects</h2><button id="saveProjectBtn" type="button" style="border:1px solid var(--border);background:#0e1016;color:var(--text);padding:8px 12px;border-radius:8px;cursor:pointer;">Save Project</button></div>
+      <div id="projectList" class="project-list"><div class="project-empty">No saved projects yet.</div></div>
+    </div>
+  </div>
 
   <div class="builder">
     <textarea id="promptInput" placeholder="e.g. Build me a modern restaurant website"></textarea>
@@ -201,8 +217,13 @@
   const preview = document.getElementById("preview");
   const openNewTab = document.getElementById("openNewTab");
   const memoryStatus = document.getElementById("memoryStatus");
+  const projectList = document.getElementById("projectList");
+  const saveProjectBtn = document.getElementById("saveProjectBtn");
   const newProjectBtn = document.getElementById("newProjectBtn");
   const MEMORY_KEY = "josynx_project_memory";
+  const PROJECTS_KEY = "josynx_projects";
+  const MAX_PROJECTS = 10;
+  let savedProjects = loadProjects();
   const MAX_MEMORY_ITEMS = 6;
   const MAX_MEMORY_ENTRY_LENGTH = 500;
   let projectMemory = loadProjectMemory();
@@ -236,6 +257,60 @@
   }
 
   updateMemoryStatus();
+  renderProjects();
+
+  function loadProjects() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(PROJECTS_KEY) || "[]");
+      return Array.isArray(saved) ? saved.filter(p => p && typeof p.name === "string" && typeof p.html === "string").slice(0, MAX_PROJECTS) : [];
+    } catch { return []; }
+  }
+
+  function saveProjects() {
+    try { localStorage.setItem(PROJECTS_KEY, JSON.stringify(savedProjects)); } catch {}
+    renderProjects();
+  }
+
+  function renderProjects() {
+    if (!savedProjects.length) {
+      projectList.innerHTML = '<div class="project-empty">No saved projects yet. Build a website, then tap Save Project.</div>';
+      return;
+    }
+    projectList.innerHTML = savedProjects.map((project, index) =>
+      '<div class="project-item"><button type="button" data-project-index="' + index + '">' + escapeHtml(project.name) + '</button><small>' + new Date(project.updatedAt).toLocaleDateString() + '</small></div>'
+    ).join("");
+    projectList.querySelectorAll("[data-project-index]").forEach(button => {
+      button.addEventListener("click", () => openProject(Number(button.dataset.projectIndex)));
+    });
+  }
+
+  function escapeHtml(value) {
+    return value.replace(/[&<>"']/g, char => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", "\"":"&quot;", "'":"&#39;" }[char]));
+  }
+
+  function saveCurrentProject() {
+    const html = preview.srcdoc;
+    if (!html) { showError("Build a website first, then save the project."); return; }
+    const suggested = promptInput.value.trim().replace(/\s+/g, " ").slice(0, 60) || "Untitled JOSYNX Project";
+    const name = window.prompt("Project name:", suggested);
+    if (!name) return;
+    const project = { name: name.trim().slice(0, 80) || "Untitled JOSYNX Project", html, memory: [...projectMemory], updatedAt: Date.now() };
+    const existing = savedProjects.findIndex(p => p.name.toLowerCase() === project.name.toLowerCase());
+    if (existing >= 0) savedProjects[existing] = project;
+    else savedProjects.unshift(project);
+    savedProjects = savedProjects.slice(0, MAX_PROJECTS);
+    saveProjects();
+    setStatus("Project saved on this device.");
+  }
+
+  function openProject(index) {
+    const project = savedProjects[index];
+    if (!project) return;
+    projectMemory = Array.isArray(project.memory) ? project.memory.slice(-MAX_MEMORY_ITEMS) : [];
+    saveProjectMemory();
+    showPreview(project.html);
+    setStatus("Opened \"" + project.name + "\". You can continue building it with AI.");
+  }
 
 
   function setStatus(msg) {
@@ -276,10 +351,11 @@
       return;
     }
 
-    const memoryContext = projectMemory.length
-      ? "You are continuing an existing JOSYNX website project. Preserve previous requirements unless the latest instruction changes them. Treat the latest instruction as an update to the same website.\n\nExisting project memory:\n" + projectMemory.map((item, i) => (i + 1) + ". " + item).join("\n") + "\n\nLatest user instruction:\n"
+    const boundedMemory = projectMemory.slice(-MAX_MEMORY_ITEMS).map(item => item.slice(0, MAX_MEMORY_ENTRY_LENGTH));
+    const memoryContext = boundedMemory.length
+      ? "You are continuing an existing JOSYNX website project. Preserve previous requirements unless the latest instruction changes them. Treat the latest instruction as an update to the same website.\\n\\nExisting project memory:\\n" + boundedMemory.map((item, i) => (i + 1) + ". " + item).join("\\n") + "\\n\\nLatest user instruction:\\n"
       : "";
-    const combinedPrompt = (memoryContext + prompt).slice(-3900);
+    const combinedPrompt = memoryContext + prompt;
 
     buildBtn.disabled = true;
     previewWrap.style.display = "none";
@@ -332,6 +408,7 @@
   }
 
   buildBtn.addEventListener("click", buildWithAI);
+  saveProjectBtn.addEventListener("click", saveCurrentProject);
   newProjectBtn.addEventListener("click", clearProjectMemory);
   promptInput.addEventListener("keydown", (event) => {
     if ((event.ctrlKey || event.metaKey) && event.key === "Enter") buildWithAI();
