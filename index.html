@@ -600,7 +600,8 @@
         body: JSON.stringify({
           html,
           task: agentTask,
-          brain: activeProjectBrain || null
+          brain: activeProjectBrain || null,
+          architecture: activeProjectArchitecture || null
         })
       });
 
@@ -615,13 +616,16 @@
 
       if (!data.brain) throw new Error("JOSYNX did not return a Project Brain.");
       activeProjectBrain = data.brain;
+      activeProjectArchitecture = data.architecture || activeProjectArchitecture;
       lastAgentChanges = Array.isArray(data.changes) ? data.changes : [];
+      renderArchitecture(activeProjectArchitecture);
 
       if (data.html) showPreview(data.html);
 
       if (currentProjectIndex !== null && savedProjects[currentProjectIndex]) {
         savedProjects[currentProjectIndex].html = data.html || html;
         savedProjects[currentProjectIndex].brain = JSON.parse(JSON.stringify(activeProjectBrain));
+        savedProjects[currentProjectIndex].architecture = activeProjectArchitecture ? JSON.parse(JSON.stringify(activeProjectArchitecture)) : null;
         savedProjects[currentProjectIndex].memory = [...projectMemory];
         savedProjects[currentProjectIndex].updatedAt = Date.now();
         saveProjects();
