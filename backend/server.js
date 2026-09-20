@@ -144,6 +144,7 @@ app.post("/api/agent", async (req, res) => {
   const html = req.body && typeof req.body.html === "string" ? req.body.html.trim() : "";
   const task = req.body && typeof req.body.task === "string" ? req.body.task.trim() : "ANALYZE";
   const brain = req.body && req.body.brain && typeof req.body.brain === "object" ? req.body.brain : null;
+  const architecture = req.body && req.body.architecture && typeof req.body.architecture === "object" ? req.body.architecture : null;
   const MAX_HTML_LENGTH = 150000;
 
   if (!html) return res.status(400).json({ error: "Missing 'html'." });
@@ -176,6 +177,14 @@ Required JSON shape:
     "goals": ["likely user/business goals based on the site"],
     "knownIssues": ["real issues or gaps visible in the current site"],
     "pendingTasks": ["useful next tasks"]
+  },
+  "architecture": {
+    "pages": [{"name": "Home", "path": "index.html", "purpose": "main page"}],
+    "components": [],
+    "routes": ["/"],
+    "sharedComponents": [],
+    "sharedStyles": [],
+    "dataModels": []
   },
   "changes": ["changes made in this run"]
 }
@@ -212,6 +221,18 @@ If mode is CUSTOM:
 
 Existing Project Brain (may be null):
 ${JSON.stringify(brain || null)}
+
+Existing Project Architecture (may be null):
+${JSON.stringify(architecture || null)}
+
+Architecture rules:
+- Treat the current website as a project that may grow into multiple pages.
+- Map actual pages visible in the current HTML and any clearly implied navigation.
+- Use page objects with name, path, and purpose.
+- Include components, routes, sharedComponents, sharedStyles, and dataModels.
+- Do not invent real backend routes or data integrations that do not exist.
+- For ANALYZE, describe the current architecture without changing HTML.
+- For MAKE_BETTER or CUSTOM, update the architecture to reflect the changes actually made.
 `;
 
   const controller = new AbortController();
