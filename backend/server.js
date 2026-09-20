@@ -139,6 +139,125 @@ Rules:
   }
 });
 
+
+app.post("/api/agent", async (req, res) => {
+  const html = req.body && typeof req.body.html === "string" ? req.body.html.trim() : "";
+  const task = req.body && typeof req.body.task === "string" ? req.body.task.trim() : "ANALYZE";
+  const brain = req.body && req.body.brain && typeof req.body.brain === "object" ? req.body.brain : null;
+  const MAX_HTML_LENGTH = 150000;
+
+  if (!html) return res.status(400).json({ error: "Missing 'html'." });
+  if (html.length > MAX_HTML_LENGTH) return res.status(413).json({ error: "Website HTML is too large for the Project Agent." });
+  if (task.length > MAX_PROMPT_LENGTH) return res.status(413).json({ error: "Agent task is too long." });
+  if (!process.env.GEMINI_API_KEY) return res.status(500).json({ error: "Server misconfiguration: GEMINI_API_KEY is not set." });
+
+  const mode = task === "MAKE_BETTER" ? "MAKE_BETTER" : "ANALYZE";
+  const systemInstructions = `
+You are JOSYNX Project Agent, an AI website development partner.
+
+Analyze the supplied standalone website as an ongoing software project.
+Return ONLY valid JSON. No markdown fences and no explanation outside the JSON.
+
+Required JSON shape:
+{
+  "html": "complete standalone HTML document",
+  "brain": {
+    "summary": "short project summary",
+    "siteType": "website type",
+    "pages": ["page names"],
+    "features": ["working or intended features"],
+    "design": {
+      "style": "visual style",
+      "primaryColor": "color or unknown",
+      "accentColor": "color or unknown",
+      "theme": "light, dark, or mixed"
+    },
+    "goals": ["likely user/business goals based on the site"],
+    "knownIssues": ["real issues or gaps visible in the current site"],
+    "pendingTasks": ["useful next tasks"]
+  },
+  "changes": ["changes made in this run"]
+}
+
+Mode: ${mode}.
+
+If mode is ANALYZE:
+- Do NOT change the website. Return the original HTML unchanged.
+- Build an accurate Project Brain from the actual website.
+
+If mode is MAKE_BETTER:
+- Act like a senior product designer and frontend developer.
+- Apply several high-value, safe improvements directly to the existing HTML.
+- Prioritize mobile responsiveness, accessibility, navigation clarity, visual hierarchy, useful interactions, forms/buttons that actually work, trust/conversion elements, SEO basics, and polish.
+- Preserve the site's identity, core content, and existing working features.
+- Do not invent sensitive business facts, fake testimonials, fake statistics, or fake credentials.
+- Do not add external CDNs, remote dependencies, external images, or external files.
+- Keep all CSS and JavaScript inline and keep the document standalone.
+- Return the fully updated HTML.
+- Report the actual changes in "changes".
+
+Existing Project Brain (may be null):
+${JSON.stringify(brain || null)}
+`;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 90000);
+
+  try {
+    const geminiResponse = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": process.env.GEMINI_API_KEY
+        },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: systemInstructions }] },
+          contents: [{
+            role: "user",
+            parts: [{
+              text: "CURRENT WEBSITE HTML:\\n\\n" + html + "\\n\\nPROJECT AGENT TASK:\\n" + mode
+            }]
+          }],
+          generationConfig: {
+            temperature: 0.45,
+            maxOutputTokens: 18000
+          }
+        }),
+        signal: controller.signal
+      }
+    );
+
+    clearTimeout(timeout);
+    const raw = await geminiResponse.text();
+    let data;
+    try { data = JSON.parse(raw); }
+    catch { return res.status(502).json({ error: "Gemini returned an unreadable response." }); }
+
+    if (!geminiResponse.ok) {
+      const message = data && data.error && data.error.message ? data.error.message : "Gemini API request failed.";
+      return res.status(502).json({ error: "Gemini API request failed.", details: message, type: data && data.error && data.error.status ? data.error.status : null });
+    }
+
+    const result = extractJson(data);
+    if (!result || !result.brain || typeof result.brain !== "object") {
+      return res.status(502).json({ error: "Gemini did not return a valid Project Brain." });
+    }
+
+    const returnedHtml = typeof result.html === "string" && result.html.trim() ? extractHtmlFromText(result.html) : html;
+    return res.json({
+      html: returnedHtml || html,
+      brain: result.brain,
+      changes: Array.isArray(result.changes) ? result.changes.slice(0, 12) : []
+    });
+  } catch (err) {
+    clearTimeout(timeout);
+    if (err.name === "AbortError") return res.status(504).json({ error: "Project Agent timed out after 90 seconds." });
+    return res.status(500).json({ error: "Unexpected server error in Project Agent.", details: err.message });
+  }
+});
+
 app.post("/api/generate", async (req, res) => {
   const prompt =
     req.body &&
@@ -321,6 +440,37 @@ app.use((req, res) => {
     error: `No route for ${req.method} ${req.path}`
   });
 });
+
+
+function extractJson(responseBody) {
+  let text = "";
+  if (responseBody && Array.isArray(responseBody.candidates)) {
+    for (const candidate of responseBody.candidates) {
+      if (candidate.content && Array.isArray(candidate.content.parts)) {
+        for (const part of candidate.content.parts) {
+          if (typeof part.text === "string") text += part.text;
+        }
+      }
+    }
+  }
+  text = text.trim();
+  const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fenceMatch) text = fenceMatch[1].trim();
+  const first = text.indexOf("{");
+  const last = text.lastIndexOf("}");
+  if (first < 0 || last <= first) return null;
+  try { return JSON.parse(text.slice(first, last + 1)); }
+  catch { return null; }
+}
+
+function extractHtmlFromText(text) {
+  let value = String(text || "").trim();
+  const fenceMatch = value.match(/```(?:html)?\s*([\s\S]*?)```/i);
+  if (fenceMatch) value = fenceMatch[1].trim();
+  const htmlStart = value.search(/<!DOCTYPE html>/i);
+  if (htmlStart > 0) value = value.slice(htmlStart);
+  return value || null;
+}
 
 function extractHtml(responseBody) {
   let text = "";
