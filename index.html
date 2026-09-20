@@ -286,7 +286,7 @@
         <div id="architectureContent" class="architecture-empty">Analyze the project to map its website architecture.</div>
       </div>
       <div class="file-workspace">
-        <div class="file-workspace-head"><h3>🗂️ Project Files</h3><span id="fileCount" class="file-count">No generated files yet</span></div>
+        <div class="file-workspace-head"><h3>🗂️ Project Files</h3><span id="fileCount" class="file-count">No generated files yet</span></div><div id="fileSelectionStatus" class="file-count" style="margin:-2px 0 10px;">No file selected — the Agent can work across the whole project.</div>
         <div id="fileTree" class="file-tree"><div class="architecture-empty">Build a multi-page project to create a real project file set.</div></div>
       </div>
     </div>
@@ -374,6 +374,7 @@
   const brainContent = document.getElementById("brainContent");
   const architectureContent = document.getElementById("architectureContent");
   const agentBtn = document.getElementById("agentBtn");
+  const fileSelectionStatus = document.getElementById("fileSelectionStatus");
 
   function loadProjectMemory() {
     try {
@@ -569,6 +570,7 @@
   function openProjectFile(path) {
     if (!activeProjectFiles || typeof activeProjectFiles[path] !== "string") return;
     activeFilePath = path;
+    if (fileSelectionStatus) fileSelectionStatus.textContent = "Selected file: " + path + " — Ask Agent can edit this file and any connected files needed.";
     if (path.endsWith(".html")) {
       showPreview(activeProjectFiles[path]);
       setStatus('Previewing project file "' + path + '".');
@@ -666,7 +668,9 @@
           html,
           task: agentTask,
           brain: activeProjectBrain || null,
-          architecture: activeProjectArchitecture || null
+          architecture: activeProjectArchitecture || null,
+          files: activeProjectFiles || null,
+          activeFile: activeFilePath || null
         })
       });
 
@@ -683,11 +687,14 @@
       activeProjectBrain = data.brain;
       activeProjectArchitecture = data.architecture || activeProjectArchitecture;
       activeProjectFiles = data.files && typeof data.files === "object" ? data.files : activeProjectFiles;
+      if (data.activeFile && activeProjectFiles && typeof activeProjectFiles[data.activeFile] === "string") activeFilePath = data.activeFile;
+      else if (activeProjectFiles && activeFilePath && typeof activeProjectFiles[activeFilePath] !== "string") activeFilePath = activeProjectFiles["index.html"] ? "index.html" : Object.keys(activeProjectFiles)[0] || null;
       lastAgentChanges = Array.isArray(data.changes) ? data.changes : [];
       renderArchitecture(activeProjectArchitecture);
       renderProjectFiles(activeProjectFiles);
 
-      if (data.html) showPreview(data.html);
+      if (activeProjectFiles && activeFilePath && activeProjectFiles[activeFilePath]) showPreview(activeProjectFiles[activeFilePath]);
+      else if (data.html) showPreview(data.html);
 
       if (currentProjectIndex !== null && savedProjects[currentProjectIndex]) {
         savedProjects[currentProjectIndex].html = data.html || html;
@@ -701,6 +708,7 @@
       }
 
       renderBrain(activeProjectBrain);
+      if (fileSelectionStatus) fileSelectionStatus.textContent = activeFilePath ? "Selected file: " + activeFilePath + " — Ask Agent can edit this file and any connected files needed." : "No file selected — the Agent can work across the whole project.";
       setStatus(task === "MAKE_BETTER"
         ? "JOSYNX improved the website and updated its Project Brain."
         : task === "CUSTOM"
