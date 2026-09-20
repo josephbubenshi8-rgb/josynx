@@ -300,7 +300,7 @@
       return;
     }
     projectList.innerHTML = savedProjects.map((project, index) =>
-      '<div class="project-item"><div class="project-meta"><div class="project-icon">🌐</div><div class="project-info"><span class="project-name">' + escapeHtml(project.name) + '</span><span class="project-date">Updated ' + new Date(project.updatedAt).toLocaleDateString() + '</span></div></div><button class="project-open" type="button" data-project-index="' + index + '">Open Project →</button></div>'
+      '<div class="project-item"><div class="project-meta"><div class="project-icon">🌐</div><div class="project-info"><span class="project-name">' + escapeHtml(project.name) + '</span><span class="project-date">Updated ' + new Date(project.updatedAt).toLocaleDateString() + '</span></div></div><button class="project-open" type="button" data-project-index="' + index + '">Open Project →</button><div class="project-actions"><button class="project-action" type="button" data-project-index="' + index + '" data-action="rename">Rename</button><button class="project-action" type="button" data-project-index="' + index + '" data-action="duplicate">Duplicate</button><button class="project-action danger" type="button" data-project-index="' + index + '" data-action="delete">Delete</button></div></div>'
     ).join("");
     projectList.querySelectorAll("[data-project-index]").forEach(button => {
       button.addEventListener("click", () => {
@@ -420,7 +420,8 @@
       zip.file("README.txt",
         "JOSYNX Website Export\\n\\n" +
         "Open index.html in a browser to preview your website.\\n" +
-        "This package was exported from JOSYNX.\\n"
+        "This package was exported from JOSYNX.\\n" +
+        "The website is packaged as a standalone index.html with inline CSS and JavaScript.\\n"
       );
 
       const blob = await zip.generateAsync({ type: "blob" });
