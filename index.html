@@ -190,6 +190,23 @@
     display: block;
   }
 
+  .brain-panel { background:linear-gradient(180deg,#151a25,#0f1219); border:1px solid var(--border); border-radius:18px; padding:18px; margin-top:18px; }
+  .brain-head { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px; }
+  .brain-head h2 { margin:0; font-size:1.05rem; }
+  .brain-subtitle { color:var(--muted); font-size:.82rem; margin-top:4px; }
+  .brain-actions { display:flex; gap:8px; flex-wrap:wrap; }
+  .brain-btn { border:1px solid var(--border); background:#171b24; color:var(--text); padding:9px 12px; border-radius:9px; cursor:pointer; font-weight:700; }
+  .brain-btn.primary { background:linear-gradient(135deg,var(--accent),var(--accent2)); border:none; }
+  .brain-btn:disabled { opacity:.55; cursor:not-allowed; }
+  .brain-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px; margin-top:14px; }
+  .brain-card { border:1px solid var(--border); border-radius:12px; padding:12px; background:#10141c; }
+  .brain-label { color:var(--muted); font-size:.72rem; text-transform:uppercase; letter-spacing:.08em; }
+  .brain-value { margin-top:5px; font-weight:700; line-height:1.35; }
+  .brain-list { margin:7px 0 0; padding-left:18px; color:#cdd2dc; font-size:.86rem; }
+  .brain-list li { margin:4px 0; }
+  .brain-changes { margin-top:12px; border-top:1px solid var(--border); padding-top:12px; }
+  .brain-empty { color:var(--muted); font-size:.88rem; }
+  .brain-pill { display:inline-block; border:1px solid #303746; background:#151a23; color:#d9deea; padding:4px 8px; border-radius:999px; margin:4px 4px 0 0; font-size:.75rem; }
   .features {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -233,6 +250,20 @@
     <div id="status"></div>
     <div id="memoryStatus" style="margin-top:8px;font-size:0.82rem;color:var(--muted);"></div>
     <div id="errorBox"></div>
+
+    <div id="brainPanel" class="brain-panel">
+      <div class="brain-head">
+        <div>
+          <h2>🧠 Project Brain</h2>
+          <div class="brain-subtitle">JOSYNX understands your website as an ongoing project — not a one-time prompt.</div>
+        </div>
+        <div class="brain-actions">
+          <button id="analyzeBtn" class="brain-btn" type="button" disabled>🧠 Analyze Project</button>
+          <button id="improveBtn" class="brain-btn primary" type="button" disabled>✨ Make It Better</button>
+        </div>
+      </div>
+      <div id="brainContent" class="brain-empty">Build or open a website, then analyze it to create its Project Brain.</div>
+    </div>
 
     <div id="previewWrap">
       <div id="previewBar">
@@ -304,6 +335,12 @@
   const MAX_MEMORY_ENTRY_LENGTH = 500;
   let projectMemory = loadProjectMemory();
   let currentProjectIndex = null;
+  let activeProjectBrain = null;
+  let lastAgentChanges = [];
+
+  const analyzeBtn = document.getElementById("analyzeBtn");
+  const improveBtn = document.getElementById("improveBtn");
+  const brainContent = document.getElementById("brainContent");
 
   function loadProjectMemory() {
     try {
@@ -329,6 +366,9 @@
     promptInput.value = "";
     previewWrap.style.display = "none";
     currentProjectIndex = null;
+    activeProjectBrain = null;
+    lastAgentChanges = [];
+    renderBrain(null);
     clearError();
     setStatus("New project started.");
     updateMemoryStatus();
@@ -379,7 +419,7 @@
     const suggested = promptInput.value.trim().replace(/\s+/g, " ").slice(0, 60) || "Untitled JOSYNX Project";
     const name = window.prompt("Project name:", suggested);
     if (!name) return;
-    const project = { name: name.trim().slice(0, 80) || "Untitled JOSYNX Project", html, memory: [...projectMemory], updatedAt: Date.now() };
+    const project = { name: name.trim().slice(0, 80) || "Untitled JOSYNX Project", html, memory: [...projectMemory], brain: activeProjectBrain ? JSON.parse(JSON.stringify(activeProjectBrain)) : null, updatedAt: Date.now() };
     const existing = savedProjects.findIndex(p => p.name.toLowerCase() === project.name.toLowerCase());
     if (existing >= 0) savedProjects[existing] = project;
     else savedProjects.unshift(project);
@@ -414,6 +454,7 @@
       name: name.slice(0, 80),
       html: project.html,
       memory: Array.isArray(project.memory) ? [...project.memory] : [],
+      brain: project.brain ? JSON.parse(JSON.stringify(project.brain)) : null,
       updatedAt: Date.now()
     });
     savedProjects = savedProjects.slice(0, MAX_PROJECTS);
@@ -436,12 +477,108 @@
     if (!project) return;
     currentProjectIndex = index;
     projectMemory = Array.isArray(project.memory) ? project.memory.slice(-MAX_MEMORY_ITEMS) : [];
+    activeProjectBrain = project.brain ? JSON.parse(JSON.stringify(project.brain)) : null;
     saveProjectMemory();
     showPreview(project.html);
+    renderBrain(activeProjectBrain);
     setStatus("Opened \"" + project.name + "\". You can continue building or editing it with AI.");
     editBtn.disabled = false;
   }
 
+
+
+  function renderList(items, emptyText) {
+    if (!Array.isArray(items) || !items.length) return '<div class="brain-empty">' + escapeHtml(emptyText) + '</div>';
+    return '<ul class="brain-list">' + items.slice(0, 8).map(item => '<li>' + escapeHtml(String(item)) + '</li>').join("") + '</ul>';
+  }
+
+  function renderPills(items, emptyText) {
+    if (!Array.isArray(items) || !items.length) return '<span class="brain-empty">' + escapeHtml(emptyText) + '</span>';
+    return items.slice(0, 10).map(item => '<span class="brain-pill">' + escapeHtml(String(item)) + '</span>').join("");
+  }
+
+  function renderBrain(brain) {
+    activeProjectBrain = brain || null;
+    if (!brain) {
+      brainContent.innerHTML = '<div class="brain-empty">Build or open a website, then analyze it to create its Project Brain.</div>';
+      analyzeBtn.disabled = !getCurrentHtml();
+      improveBtn.disabled = !getCurrentHtml();
+      return;
+    }
+    const design = brain.design || {};
+    brainContent.innerHTML =
+      '<div class="brain-grid">' +
+        '<div class="brain-card"><div class="brain-label">Site type</div><div class="brain-value">' + escapeHtml(brain.siteType || "Unknown") + '</div></div>' +
+        '<div class="brain-card"><div class="brain-label">Design</div><div class="brain-value">' + escapeHtml(design.style || "Not identified") + '</div></div>' +
+        '<div class="brain-card"><div class="brain-label">Pages</div>' + renderPills(brain.pages, "None identified") + '</div>' +
+        '<div class="brain-card"><div class="brain-label">Features</div>' + renderPills(brain.features, "None identified") + '</div>' +
+      '</div>' +
+      '<div class="brain-grid">' +
+        '<div class="brain-card"><div class="brain-label">Goals</div>' + renderList(brain.goals, "No goals identified") + '</div>' +
+        '<div class="brain-card"><div class="brain-label">Known issues</div>' + renderList(brain.knownIssues, "No major issues identified") + '</div>' +
+        '<div class="brain-card"><div class="brain-label">Next tasks</div>' + renderList(brain.pendingTasks, "No pending tasks") + '</div>' +
+      '</div>' +
+      (brain.summary ? '<div class="brain-card" style="margin-top:10px"><div class="brain-label">Project summary</div><div class="brain-value" style="font-weight:500">' + escapeHtml(brain.summary) + '</div></div>' : '') +
+      (lastAgentChanges.length ? '<div class="brain-changes"><div class="brain-label">Latest AI changes</div>' + renderList(lastAgentChanges, "No changes reported") + '</div>' : '');
+    analyzeBtn.disabled = !getCurrentHtml();
+    improveBtn.disabled = !getCurrentHtml();
+  }
+
+  async function runProjectAgent(task) {
+    const html = getCurrentHtml();
+    clearError();
+    if (!html) { showError("Build or open a website first."); return; }
+
+    analyzeBtn.disabled = true;
+    improveBtn.disabled = true;
+    setStatus(task === "MAKE_BETTER" ? "JOSYNX is analyzing the website and improving it…" : "JOSYNX is building your Project Brain…");
+
+    try {
+      const response = await fetch(API_BASE + "/api/agent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          html,
+          task,
+          brain: activeProjectBrain || null
+        })
+      });
+
+      let data;
+      try { data = await response.json(); }
+      catch { throw new Error("Server returned an unreadable response (HTTP " + response.status + ")."); }
+
+      if (!response.ok) {
+        const parts = [data && data.error, data && data.details, data && data.type].filter(Boolean);
+        throw new Error(parts.length ? parts.join(" — ") : "Project Agent failed (HTTP " + response.status + ").");
+      }
+
+      if (!data.brain) throw new Error("JOSYNX did not return a Project Brain.");
+      activeProjectBrain = data.brain;
+      lastAgentChanges = Array.isArray(data.changes) ? data.changes : [];
+
+      if (data.html) showPreview(data.html);
+
+      if (currentProjectIndex !== null && savedProjects[currentProjectIndex]) {
+        savedProjects[currentProjectIndex].html = data.html || html;
+        savedProjects[currentProjectIndex].brain = JSON.parse(JSON.stringify(activeProjectBrain));
+        savedProjects[currentProjectIndex].memory = [...projectMemory];
+        savedProjects[currentProjectIndex].updatedAt = Date.now();
+        saveProjects();
+      }
+
+      renderBrain(activeProjectBrain);
+      setStatus(task === "MAKE_BETTER"
+        ? "JOSYNX improved the website and updated its Project Brain."
+        : "Project Brain created. JOSYNX now understands this website.");
+    } catch (err) {
+      setStatus("");
+      showError("Project Agent failed: " + (err && err.message ? err.message : "Unknown error. Check your connection and try again."));
+    } finally {
+      analyzeBtn.disabled = !getCurrentHtml();
+      improveBtn.disabled = !getCurrentHtml();
+    }
+  }
 
   function setStatus(msg) {
     statusEl.textContent = msg || "";
@@ -534,6 +671,8 @@
   function showPreview(html) {
     preview.srcdoc = html;
     editBtn.disabled = false;
+    analyzeBtn.disabled = false;
+    improveBtn.disabled = false;
     previewWrap.style.display = "block";
 
     // "Open in new tab" via a blob URL so it works without a server.
@@ -599,6 +738,9 @@
       setStatus(projectMemory.length ? "Updated your existing project with the latest instruction." : "Done. Your project has been started.");
       showPreview(data.html);
       currentProjectIndex = null;
+      activeProjectBrain = null;
+      lastAgentChanges = [];
+      renderBrain(null);
       projectMemory.push(prompt.replace(/\s+/g, " ").trim().slice(0, MAX_MEMORY_ENTRY_LENGTH));
       projectMemory = projectMemory.slice(-MAX_MEMORY_ITEMS);
       saveProjectMemory();
@@ -654,6 +796,13 @@
       if (!data.html) throw new Error("Server did not return updated HTML.");
 
       showPreview(data.html);
+      if (activeProjectBrain) {
+        activeProjectBrain.knownIssues = Array.isArray(activeProjectBrain.knownIssues) ? activeProjectBrain.knownIssues : [];
+        activeProjectBrain.pendingTasks = Array.isArray(activeProjectBrain.pendingTasks) ? activeProjectBrain.pendingTasks : [];
+        activeProjectBrain.pendingTasks.unshift("Re-analyze Project Brain after the latest edit.");
+        activeProjectBrain.pendingTasks = [...new Set(activeProjectBrain.pendingTasks)].slice(0, 6);
+        renderBrain(activeProjectBrain);
+      }
       const memoryEntry = "Edit: " + instruction.replace(/\s+/g, " ").trim();
       projectMemory.push(memoryEntry.slice(0, MAX_MEMORY_ENTRY_LENGTH));
       projectMemory = projectMemory.slice(-MAX_MEMORY_ITEMS);
@@ -662,6 +811,7 @@
       if (currentProjectIndex !== null && savedProjects[currentProjectIndex]) {
         savedProjects[currentProjectIndex].html = data.html;
         savedProjects[currentProjectIndex].memory = [...projectMemory];
+        savedProjects[currentProjectIndex].brain = activeProjectBrain ? JSON.parse(JSON.stringify(activeProjectBrain)) : null;
         savedProjects[currentProjectIndex].updatedAt = Date.now();
         saveProjects();
         setStatus("Current project updated and saved automatically.");
@@ -703,6 +853,8 @@
     });
   });
 
+  analyzeBtn.addEventListener("click", () => runProjectAgent("ANALYZE"));
+  improveBtn.addEventListener("click", () => runProjectAgent("MAKE_BETTER"));
   buildBtn.addEventListener("click", buildWithAI);
   editBtn.addEventListener("click", editCurrentSite);
   saveProjectBtn.addEventListener("click", saveCurrentProject);
