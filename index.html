@@ -91,13 +91,21 @@
   #buildBtn:disabled { opacity: 0.6; cursor: not-allowed; }
 
   .workspace { display:grid; gap:16px; margin-bottom:24px; }
-  .projects-panel { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:18px; }
-  .projects-head { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px; }
+  .projects-panel { background:linear-gradient(180deg,#141821,#10131a); border:1px solid var(--border); border-radius:18px; padding:18px; box-shadow:0 12px 35px rgba(0,0,0,.18); }
+  .projects-head { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:14px; }
   .projects-head h2 { margin:0; font-size:1.05rem; }
-  .project-list { display:grid; gap:8px; }
-  .project-item { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 12px; border:1px solid var(--border); border-radius:10px; background:#0e1016; }
-  .project-item button { border:0; background:transparent; color:var(--text); text-align:left; cursor:pointer; font:inherit; flex:1; }
-  .project-item small { color:var(--muted); white-space:nowrap; }
+  .projects-title-wrap { min-width:0; }
+  .projects-subtitle { color:var(--muted); font-size:.82rem; margin-top:4px; }
+  .project-list { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px; }
+  .project-item { display:flex; flex-direction:column; align-items:stretch; gap:12px; padding:14px; border:1px solid var(--border); border-radius:14px; background:linear-gradient(145deg,#11151d,#0d1016); transition:transform .18s ease,border-color .18s ease; }
+  .project-item:hover { transform:translateY(-2px); border-color:#3a4050; }
+  .project-meta { display:flex; align-items:center; gap:10px; }
+  .project-icon { width:42px; height:42px; display:grid; place-items:center; border-radius:11px; background:linear-gradient(135deg,var(--accent),var(--accent2)); font-size:1.15rem; }
+  .project-info { min-width:0; }
+  .project-name { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:700; }
+  .project-date { display:block; color:var(--muted); font-size:.76rem; margin-top:3px; }
+  .project-open { width:100%; border:1px solid var(--border); background:#171b24; color:var(--text); padding:9px 11px; border-radius:9px; cursor:pointer; font-weight:600; }
+  .project-open:hover { background:#1c2230; }
   .project-empty { color:var(--muted); font-size:.9rem; }
   #status { margin-top: 14px; font-size: 0.95rem; color: var(--muted); min-height: 1.2em; }
   #errorBox {
@@ -166,7 +174,7 @@
 
   <div class="workspace">
     <div class="projects-panel">
-      <div class="projects-head"><h2>📂 My Projects</h2><button id="saveProjectBtn" type="button" style="border:1px solid var(--border);background:#0e1016;color:var(--text);padding:8px 12px;border-radius:8px;cursor:pointer;">Save Project</button></div>
+      <div class="projects-head"><div class="projects-title-wrap"><h2>📂 My Projects</h2><div class="projects-subtitle">Your websites, saved on this device.</div></div><button id="saveProjectBtn" type="button" style="border:1px solid var(--border);background:#0e1016;color:var(--text);padding:8px 12px;border-radius:8px;cursor:pointer;">Save Project</button></div>
       <div id="projectList" class="project-list"><div class="project-empty">No saved projects yet.</div></div>
     </div>
   </div>
@@ -277,7 +285,7 @@
       return;
     }
     projectList.innerHTML = savedProjects.map((project, index) =>
-      '<div class="project-item"><button type="button" data-project-index="' + index + '">' + escapeHtml(project.name) + '</button><small>' + new Date(project.updatedAt).toLocaleDateString() + '</small></div>'
+      '<div class="project-item"><div class="project-meta"><div class="project-icon">🌐</div><div class="project-info"><span class="project-name">' + escapeHtml(project.name) + '</span><span class="project-date">Updated ' + new Date(project.updatedAt).toLocaleDateString() + '</span></div></div><button class="project-open" type="button" data-project-index="' + index + '">Open Project →</button></div>'
     ).join("");
     projectList.querySelectorAll("[data-project-index]").forEach(button => {
       button.addEventListener("click", () => openProject(Number(button.dataset.projectIndex)));
