@@ -145,10 +145,25 @@ app.post("/api/agent", async (req, res) => {
   const task = req.body && typeof req.body.task === "string" ? req.body.task.trim() : "ANALYZE";
   const brain = req.body && req.body.brain && typeof req.body.brain === "object" ? req.body.brain : null;
   const architecture = req.body && req.body.architecture && typeof req.body.architecture === "object" ? req.body.architecture : null;
+  const files = req.body && req.body.files && typeof req.body.files === "object" ? req.body.files : null;
+  const activeFile = req.body && typeof req.body.activeFile === "string" ? req.body.activeFile.trim() : null;
   const MAX_HTML_LENGTH = 150000;
+  const MAX_FILE_LENGTH = 150000;
+  const MAX_FILESET_LENGTH = 600000;
 
   if (!html) return res.status(400).json({ error: "Missing 'html'." });
   if (html.length > MAX_HTML_LENGTH) return res.status(413).json({ error: "Website HTML is too large for the Project Agent." });
+  if (files) {
+    const entries = Object.entries(files);
+    if (entries.length > 40) return res.status(413).json({ error: "Project contains too many files for the Project Agent." });
+    let total = 0;
+    for (const [path, content] of entries) {
+      if (!path || path.length > 160 || path.startsWith("/") || path.includes("..") || typeof content !== "string") return res.status(400).json({ error: "Project contains an invalid file path or file." });
+      if (content.length > MAX_FILE_LENGTH) return res.status(413).json({ error: "A project file is too large for the Project Agent." });
+      total += content.length;
+    }
+    if (total > MAX_FILESET_LENGTH) return res.status(413).json({ error: "The project file set is too large for the Project Agent." });
+  }
   if (task.length > MAX_PROMPT_LENGTH) return res.status(413).json({ error: "Agent task is too long." });
   if (!process.env.GEMINI_API_KEY) return res.status(500).json({ error: "Server misconfiguration: GEMINI_API_KEY is not set." });
 
@@ -186,7 +201,10 @@ Required JSON shape:
     "sharedStyles": [],
     "dataModels": []
   },
-  "changes": ["changes made in this run"]
+  "changes": ["changes made in this run"],
+  "affectedFiles": ["files changed"],
+  "activeFile": "index.html",
+  "files": {"index.html": "...", "about.html": "..."}
 }
 
 Mode: ${mode}.
@@ -207,6 +225,16 @@ If mode is MAKE_BETTER:
 - Return the fully updated HTML.
 - Report the actual changes in "changes".
 
+If project files are provided:
+- Treat the file set as one coherent multi-file static project.
+- The user may be referring to the selected file or to the project as a whole.
+- Determine which files must change and update every connected file needed to keep navigation, shared styles, scripts, and functionality consistent.
+- Preserve unrelated files exactly when they do not need changes.
+- Return the complete updated file map in "files".
+- Set "affectedFiles" to the paths you actually changed.
+- Set "activeFile" to the most relevant HTML file for preview after the change.
+- Always keep index.html when it exists.
+
 If mode is CUSTOM:
 - Treat the user's Agent command as a direct development task for the current website.
 - Understand the existing website before changing it.
@@ -224,6 +252,12 @@ ${JSON.stringify(brain || null)}
 
 Existing Project Architecture (may be null):
 ${JSON.stringify(architecture || null)}
+
+PROJECT FILES (when provided):
+${JSON.stringify(files || null)}
+
+SELECTED FILE (when provided):
+${JSON.stringify(activeFile || null)}
 
 Architecture rules:
 - Treat the current website as a project that may grow into multiple pages.
@@ -252,7 +286,7 @@ Architecture rules:
           contents: [{
             role: "user",
             parts: [{
-              text: "CURRENT WEBSITE HTML:\\n\\n" + html + "\\n\\nPROJECT AGENT TASK:\\n" + mode
+              text: "CURRENT WEBSITE HTML:\\n\\n" + html + "\\n\\nPROJECT FILES:\\n" + JSON.stringify(files || null) + "\\n\\nSELECTED FILE:\\n" + (activeFile || "none") + "\\n\\nPROJECT AGENT TASK:\\n" + (mode === "CUSTOM" ? customTask : mode)
             }]
           }],
           generationConfig: {
@@ -281,8 +315,26 @@ Architecture rules:
     }
 
     const returnedHtml = typeof result.html === "string" && result.html.trim() ? extractHtmlFromText(result.html) : html;
+    let returnedFiles = null;
+    if (result.files && typeof result.files === "object") {
+      returnedFiles = {};
+      let total = 0;
+      for (const [path, content] of Object.entries(result.files)) {
+        if (typeof path === "string" && path.length <= 160 && !path.startsWith("/") && !path.includes("..") && typeof content === "string" && content.length <= MAX_FILE_LENGTH) {
+          total += content.length;
+          if (total <= MAX_FILESET_LENGTH) returnedFiles[path] = content;
+        }
+      }
+      if (returnedFiles["index.html"] === undefined && files && files["index.html"]) returnedFiles["index.html"] = files["index.html"];
+      if (!Object.keys(returnedFiles).length) returnedFiles = null;
+    }
+    const chosenActiveFile = returnedFiles && result.activeFile && typeof returnedFiles[result.activeFile] === "string" ? result.activeFile : (returnedFiles && activeFile && typeof returnedFiles[activeFile] === "string" ? activeFile : (returnedFiles && returnedFiles["index.html"] ? "index.html" : null));
+    const previewHtml = returnedFiles && chosenActiveFile && typeof returnedFiles[chosenActiveFile] === "string" && /\.html?$/i.test(chosenActiveFile) ? extractHtmlFromText(returnedFiles[chosenActiveFile]) : (returnedHtml || html);
     return res.json({
-      html: returnedHtml || html,
+      html: previewHtml || returnedHtml || html,
+      files: returnedFiles,
+      activeFile: chosenActiveFile,
+      affectedFiles: Array.isArray(result.affectedFiles) ? result.affectedFiles.slice(0, 40) : [],
       brain: result.brain,
       architecture: result.architecture && typeof result.architecture === "object" ? result.architecture : (architecture || null),
       changes: Array.isArray(result.changes) ? result.changes.slice(0, 12) : []
