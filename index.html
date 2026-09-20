@@ -215,6 +215,13 @@
   .architecture-card strong { display:block; margin-bottom:4px; }
   .architecture-card small { color:var(--muted); line-height:1.4; }
   .architecture-empty { color:var(--muted); font-size:.84rem; }
+  .file-editor { margin-top:12px; border:1px solid var(--border); border-radius:10px; padding:10px; background:#0d1118; }
+  .file-editor-head { display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:8px; }
+  .file-editor-path { color:var(--text); font-weight:700; font-size:.85rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .file-editor textarea { width:100%; min-height:260px; resize:vertical; box-sizing:border-box; background:#090c11; color:var(--text); border:1px solid var(--border); border-radius:8px; padding:10px; font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; }
+  .file-editor textarea:focus { outline:none; border-color:#3a4050; }
+  .file-editor-actions { display:flex; gap:8px; margin-top:8px; flex-wrap:wrap; }
+  .file-editor-status { color:var(--muted); font-size:.78rem; margin-top:7px; }
   .file-search { display:flex; gap:8px; margin-bottom:10px; }
   .file-search input { flex:1; min-width:0; background:#0e1016; color:var(--text); border:1px solid var(--border); border-radius:9px; padding:9px 11px; font:inherit; }
   .file-search input:focus { outline:none; border-color:#3a4050; }
@@ -350,6 +357,18 @@
           <button id="fileSearchClear" class="file-search-clear" type="button">Clear</button>
         </div>
         <div id="fileSearchResults"></div>
+        <div id="fileEditor" class="file-editor" hidden>
+          <div class="file-editor-head">
+            <div id="fileEditorPath" class="file-editor-path">No file selected</div>
+            <button id="fileEditorClose" class="file-search-clear" type="button">Close</button>
+          </div>
+          <textarea id="fileEditorTextarea" spellcheck="false" placeholder="Select a file to edit…"></textarea>
+          <div class="file-editor-actions">
+            <button id="fileEditorSave" class="primary" type="button">💾 Save File</button>
+            <button id="fileEditorCancel" class="file-search-clear" type="button">Cancel</button>
+          </div>
+          <div id="fileEditorStatus" class="file-editor-status">Changes stay in the current project until you save/export them.</div>
+        </div>
         <div id="fileTree" class="file-tree"><div class="architecture-empty">Build a multi-page project to create a real project file set.</div></div>
       </div>
     </div>
@@ -423,6 +442,14 @@
   const fileSearchInput = document.getElementById("fileSearchInput");
   const fileSearchClear = document.getElementById("fileSearchClear");
   const fileSearchResults = document.getElementById("fileSearchResults");
+  const fileEditor = document.getElementById("fileEditor");
+  const fileEditorPath = document.getElementById("fileEditorPath");
+  const fileEditorTextarea = document.getElementById("fileEditorTextarea");
+  const fileEditorSave = document.getElementById("fileEditorSave");
+  const fileEditorCancel = document.getElementById("fileEditorCancel");
+  const fileEditorClose = document.getElementById("fileEditorClose");
+  const fileEditorStatus = document.getElementById("fileEditorStatus");
+  let editingFilePath = null;
   const MEMORY_KEY = "josynx_project_memory";
   const PROJECTS_KEY = "josynx_projects";
   const MAX_PROJECTS = 10;
@@ -629,6 +656,41 @@
     return items.slice(0, 10).map(item => '<span class="brain-pill">' + escapeHtml(String(item)) + '</span>').join("");
   }
 
+  function openFileEditor(path) {
+    if (!path || !activeProjectFiles || !(path in activeProjectFiles)) return;
+    editingFilePath = path;
+    fileEditorPath.textContent = path;
+    fileEditorTextarea.value = activeProjectFiles[path] || "";
+    fileEditorStatus.textContent = "Editing " + path;
+    fileEditor.hidden = false;
+    fileEditorTextarea.focus();
+  }
+
+  function closeFileEditor() {
+    editingFilePath = null;
+    fileEditor.hidden = true;
+    fileEditorTextarea.value = "";
+    fileEditorStatus.textContent = "Changes stay in the current project until you save/export them.";
+  }
+
+  function saveEditedFile() {
+    if (!editingFilePath || !activeProjectFiles) return;
+    captureSnapshot("Edit file: " + editingFilePath);
+    activeProjectFiles[editingFilePath] = fileEditorTextarea.value;
+    activeFilePath = editingFilePath;
+    if (editingFilePath.toLowerCase().endsWith(".html")) {
+      showPreview(fileEditorTextarea.value);
+    }
+    renderProjectFiles(activeProjectFiles);
+    updateFileSelectionStatus();
+    saveCurrentProject();
+    validateBtn.disabled = false;
+    lastValidation = null;
+    autoFixBtn.disabled = true;
+    fileEditorStatus.textContent = "Saved locally to the current project. Run Validator before export.";
+    renderHistory();
+  }
+
   function searchProjectFiles(query) {
     if (!fileSearchResults) return;
     const q = String(query || "").trim().toLowerCase();
@@ -657,6 +719,7 @@
     fileSearchResults.querySelectorAll("[data-search-path]").forEach(button => {
       button.addEventListener("click", () => {
         openProjectFile(button.dataset.searchPath);
+        openFileEditor(button.dataset.searchPath);
         const target = document.querySelector('.file-item[data-file-path="' + CSS.escape(button.dataset.searchPath) + '"]');
         if (target) target.scrollIntoView({ behavior:"smooth", block:"center" });
       });
@@ -1539,6 +1602,9 @@
   undoBtn.addEventListener("click", undoLastChange);
   if (fileSearchInput) fileSearchInput.addEventListener("input", () => searchProjectFiles(fileSearchInput.value));
   if (fileSearchClear) fileSearchClear.addEventListener("click", () => { fileSearchInput.value = ""; searchProjectFiles(""); fileSearchInput.focus(); });
+  if (fileEditorSave) fileEditorSave.addEventListener("click", saveEditedFile);
+  if (fileEditorCancel) fileEditorCancel.addEventListener("click", closeFileEditor);
+  if (fileEditorClose) fileEditorClose.addEventListener("click", closeFileEditor);
   renderHistory();
   promptInput.addEventListener("keydown", (event) => {
     if ((event.ctrlKey || event.metaKey) && event.key === "Enter") buildWithAI();
