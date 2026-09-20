@@ -156,10 +156,36 @@
     color: var(--muted);
   }
   #previewBar a { color: var(--accent2); text-decoration: none; }
+  .preview-controls { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+  .preview-device {
+    border:1px solid var(--border);
+    background:#151922;
+    color:var(--muted);
+    padding:6px 9px;
+    border-radius:7px;
+    cursor:pointer;
+    font-size:.76rem;
+    font-weight:700;
+  }
+  .preview-device.active, .preview-device:hover { color:var(--text); background:#202635; border-color:#3a4050; }
+  .preview-stage {
+    background:#090b10;
+    padding:18px;
+    display:flex;
+    justify-content:center;
+    min-height:70vh;
+  }
+  .preview-frame {
+    width:100%;
+    transition:width .2s ease;
+  }
+  .preview-frame.tablet { width:min(820px,100%); }
+  .preview-frame.mobile { width:min(390px,100%); }
   iframe#preview {
     width: 100%;
     height: 70vh;
-    border: none;
+    border: 1px solid #252a35;
+    border-radius: 10px;
     background: white;
     display: block;
   }
@@ -211,14 +237,24 @@
     <div id="previewWrap">
       <div id="previewBar">
         <span>Live preview</span>
-        <a id="openNewTab" href="#" target="_blank" rel="noopener">Open in new tab ↗</a>
+        <div class="preview-controls">
+          <button class="preview-device active" type="button" data-device="desktop">🖥️ Desktop</button>
+          <button class="preview-device" type="button" data-device="tablet">📱 Tablet</button>
+          <button class="preview-device" type="button" data-device="mobile">📱 Mobile</button>
+          <button class="preview-device" type="button" id="refreshPreviewBtn">↻ Refresh</button>
+          <a id="openNewTab" href="#" target="_blank" rel="noopener">Open ↗</a>
+        </div>
       </div>
       <div class="export-actions">
         <button id="downloadHtmlBtn" class="export-btn" type="button">⬇️ Download HTML</button>
         <button id="copyHtmlBtn" class="export-btn" type="button">📋 Copy HTML</button>
         <button id="downloadZipBtn" class="export-btn" type="button">📦 Download ZIP</button>
       </div>
-      <iframe id="preview" title="Generated website preview" sandbox="allow-scripts allow-forms allow-popups allow-modals"></iframe>
+      <div class="preview-stage">
+        <div id="previewFrame" class="preview-frame">
+          <iframe id="preview" title="Generated website preview" sandbox="allow-scripts allow-forms allow-popups allow-modals"></iframe>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -250,6 +286,9 @@
   const previewWrap = document.getElementById("previewWrap");
   const preview = document.getElementById("preview");
   const openNewTab = document.getElementById("openNewTab");
+  const previewFrame = document.getElementById("previewFrame");
+  const refreshPreviewBtn = document.getElementById("refreshPreviewBtn");
+  const previewDeviceButtons = document.querySelectorAll(".preview-device[data-device]");
   const downloadHtmlBtn = document.getElementById("downloadHtmlBtn");
   const copyHtmlBtn = document.getElementById("copyHtmlBtn");
   const downloadZipBtn = document.getElementById("downloadZipBtn");
@@ -638,6 +677,31 @@
       editBtn.disabled = !getCurrentHtml();
     }
   }
+
+
+
+  previewDeviceButtons.forEach(button => {
+    button.addEventListener("click", () => {
+      previewDeviceButtons.forEach(item => item.classList.remove("active"));
+      button.classList.add("active");
+      const device = button.dataset.device;
+      previewFrame.classList.remove("tablet", "mobile");
+      if (device === "tablet") previewFrame.classList.add("tablet");
+      if (device === "mobile") previewFrame.classList.add("mobile");
+      setStatus("Preview set to " + device + " view.");
+    });
+  });
+
+  refreshPreviewBtn.addEventListener("click", () => {
+    const html = getCurrentHtml();
+    if (!html) return;
+    const current = preview.srcdoc;
+    preview.srcdoc = "";
+    requestAnimationFrame(() => {
+      preview.srcdoc = current;
+      setStatus("Preview refreshed.");
+    });
+  });
 
   buildBtn.addEventListener("click", buildWithAI);
   editBtn.addEventListener("click", editCurrentSite);
