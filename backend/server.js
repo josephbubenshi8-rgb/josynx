@@ -5,6 +5,7 @@ const cors = require("cors");
 
 const app = express();
 const PORT = process.env.PORT || 10000;
+const MAX_PROMPT_LENGTH = 4000;
 
 const GEMINI_MODEL =
   process.env.GEMINI_MODEL || "gemini-3.1-flash-lite";
@@ -63,6 +64,12 @@ app.post("/api/generate", async (req, res) => {
   if (!prompt) {
     return res.status(400).json({
       error: "Missing 'prompt'."
+    });
+  }
+
+  if (prompt.length > MAX_PROMPT_LENGTH) {
+    return res.status(413).json({
+      error: `Prompt is too long. Please keep it under ${MAX_PROMPT_LENGTH} characters.`
     });
   }
 
@@ -254,7 +261,7 @@ function extractHtml(responseBody) {
   text = text.trim();
 
   const fenceMatch = text.match(
-    /```(?:html)?\s*([\s\S]*?)```/i
+    /\`\`\`(?:html)?\\s*([\\s\\S]*?)\`\`\`/i
   );
 
   if (fenceMatch) {
