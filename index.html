@@ -207,6 +207,14 @@
   .brain-changes { margin-top:12px; border-top:1px solid var(--border); padding-top:12px; }
   .brain-empty { color:var(--muted); font-size:.88rem; }
   .brain-pill { display:inline-block; border:1px solid #303746; background:#151a23; color:#d9deea; padding:4px 8px; border-radius:999px; margin:4px 4px 0 0; font-size:.75rem; }
+  .architecture-panel { margin-top:14px; border:1px solid var(--border); border-radius:14px; padding:14px; background:#0e1219; }
+  .architecture-head { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:10px; }
+  .architecture-head h3 { margin:0; font-size:.95rem; }
+  .architecture-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:10px; }
+  .architecture-card { border:1px solid var(--border); border-radius:11px; padding:11px; background:#11151d; }
+  .architecture-card strong { display:block; margin-bottom:4px; }
+  .architecture-card small { color:var(--muted); line-height:1.4; }
+  .architecture-empty { color:var(--muted); font-size:.84rem; }
   .features {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -264,6 +272,10 @@
         </div>
       </div>
       <div id="brainContent" class="brain-empty">Build or open a website, then analyze it to create its Project Brain.</div>
+      <div id="architecturePanel" class="architecture-panel">
+        <div class="architecture-head"><h3>🗺️ Project Architecture</h3><span class="brain-subtitle">Pages, routes and shared structure</span></div>
+        <div id="architectureContent" class="architecture-empty">Analyze the project to map its website architecture.</div>
+      </div>
     </div>
 
     <div id="previewWrap">
@@ -337,11 +349,13 @@
   let projectMemory = loadProjectMemory();
   let currentProjectIndex = null;
   let activeProjectBrain = null;
+  let activeProjectArchitecture = null;
   let lastAgentChanges = [];
 
   const analyzeBtn = document.getElementById("analyzeBtn");
   const improveBtn = document.getElementById("improveBtn");
   const brainContent = document.getElementById("brainContent");
+  const architectureContent = document.getElementById("architectureContent");
   const agentBtn = document.getElementById("agentBtn");
 
   function loadProjectMemory() {
@@ -369,7 +383,9 @@
     previewWrap.style.display = "none";
     currentProjectIndex = null;
     activeProjectBrain = null;
+    activeProjectArchitecture = null;
     lastAgentChanges = [];
+    renderArchitecture(null);
     renderBrain(null);
     clearError();
     setStatus("New project started.");
@@ -378,6 +394,7 @@
 
   updateMemoryStatus();
   renderProjects();
+  renderArchitecture(null);
 
   function loadProjects() {
     try {
@@ -421,7 +438,7 @@
     const suggested = promptInput.value.trim().replace(/\s+/g, " ").slice(0, 60) || "Untitled JOSYNX Project";
     const name = window.prompt("Project name:", suggested);
     if (!name) return;
-    const project = { name: name.trim().slice(0, 80) || "Untitled JOSYNX Project", html, memory: [...projectMemory], brain: activeProjectBrain ? JSON.parse(JSON.stringify(activeProjectBrain)) : null, updatedAt: Date.now() };
+    const project = { name: name.trim().slice(0, 80) || "Untitled JOSYNX Project", html, memory: [...projectMemory], brain: activeProjectBrain ? JSON.parse(JSON.stringify(activeProjectBrain)) : null, architecture: activeProjectArchitecture ? JSON.parse(JSON.stringify(activeProjectArchitecture)) : null, updatedAt: Date.now() };
     const existing = savedProjects.findIndex(p => p.name.toLowerCase() === project.name.toLowerCase());
     if (existing >= 0) savedProjects[existing] = project;
     else savedProjects.unshift(project);
@@ -526,6 +543,31 @@
     analyzeBtn.disabled = !getCurrentHtml();
     improveBtn.disabled = !getCurrentHtml();
     agentBtn.disabled = !getCurrentHtml();
+  }
+
+  function renderArchitecture(architecture) {
+    if (!architectureContent) return;
+    if (!architecture) {
+      architectureContent.innerHTML = '<div class="architecture-empty">Analyze the project to map its website architecture.</div>';
+      return;
+    }
+    const pages = Array.isArray(architecture.pages) ? architecture.pages : [];
+    const components = Array.isArray(architecture.components) ? architecture.components : [];
+    const routes = Array.isArray(architecture.routes) ? architecture.routes : [];
+    const shared = Array.isArray(architecture.sharedComponents) ? architecture.sharedComponents : [];
+    const cards = pages.length
+      ? pages.map(page => {
+          const name = typeof page === "string" ? page : (page.name || "Unnamed page");
+          const path = typeof page === "string" ? "" : (page.path || "");
+          const purpose = typeof page === "string" ? "" : (page.purpose || "");
+          return '<div class="architecture-card"><strong>📄 ' + escapeHtml(name) + '</strong><small>' + escapeHtml(path) + (purpose ? ' — ' + escapeHtml(purpose) : '') + '</small></div>';
+        }).join("")
+      : '<div class="architecture-empty">No pages detected yet.</div>';
+    architectureContent.innerHTML =
+      '<div class="architecture-grid">' + cards + '</div>' +
+      '<div style="margin-top:10px"><span class="brain-pill">Routes: ' + routes.length + '</span><span class="brain-pill">Components: ' + components.length + '</span><span class="brain-pill">Shared: ' + shared.length + '</span></div>' +
+      (routes.length ? '<div style="margin-top:8px;color:var(--muted);font-size:.82rem"><strong>Routes:</strong> ' + routes.map(escapeHtml).join(' · ') + '</div>' : '') +
+      (shared.length ? '<div style="margin-top:6px;color:var(--muted);font-size:.82rem"><strong>Shared:</strong> ' + shared.map(escapeHtml).join(' · ') + '</div>' : '');
   }
 
   async function runProjectAgent(task) {
