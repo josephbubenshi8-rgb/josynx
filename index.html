@@ -110,6 +110,9 @@
   .project-action { border:1px solid var(--border); background:#11151d; color:var(--text); padding:8px 7px; border-radius:8px; cursor:pointer; font-size:.78rem; font-weight:600; }
   .project-action:hover { background:#1c2230; }
   .project-action.danger:hover { border-color:var(--danger); color:#ffb3b3; }
+  .export-actions { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
+  .export-btn { border:1px solid var(--border); background:#11151d; color:var(--text); padding:9px 12px; border-radius:9px; cursor:pointer; font-weight:600; }
+  .export-btn:hover { background:#1c2230; }
   .project-empty { color:var(--muted); font-size:.9rem; }
   #status { margin-top: 14px; font-size: 0.95rem; color: var(--muted); min-height: 1.2em; }
   #errorBox {
@@ -197,6 +200,10 @@
         <span>Live preview</span>
         <a id="openNewTab" href="#" target="_blank" rel="noopener">Open in new tab ↗</a>
       </div>
+      <div class="export-actions">
+        <button id="downloadHtmlBtn" class="export-btn" type="button">⬇️ Download HTML</button>
+        <button id="copyHtmlBtn" class="export-btn" type="button">📋 Copy HTML</button>
+      </div>
       <iframe id="preview" title="Generated website preview" sandbox="allow-scripts allow-forms allow-popups allow-modals"></iframe>
     </div>
   </div>
@@ -228,6 +235,8 @@
   const previewWrap = document.getElementById("previewWrap");
   const preview = document.getElementById("preview");
   const openNewTab = document.getElementById("openNewTab");
+  const downloadHtmlBtn = document.getElementById("downloadHtmlBtn");
+  const copyHtmlBtn = document.getElementById("copyHtmlBtn");
   const memoryStatus = document.getElementById("memoryStatus");
   const projectList = document.getElementById("projectList");
   const saveProjectBtn = document.getElementById("saveProjectBtn");
@@ -389,6 +398,41 @@
     errorBox.textContent = "";
   }
 
+  function getCurrentHtml() {
+    return preview.srcdoc || "";
+  }
+
+  function getExportFileName() {
+    const raw = promptInput.value.trim().replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "").toLowerCase();
+    return (raw || "josynx-website") + ".html";
+  }
+
+  function downloadHtml() {
+    const html = getCurrentHtml();
+    if (!html) { showError("Build or open a project first, then export it."); return; }
+    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = getExportFileName();
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setStatus("HTML website downloaded to your device.");
+  }
+
+  async function copyHtml() {
+    const html = getCurrentHtml();
+    if (!html) { showError("Build or open a project first, then copy the HTML."); return; }
+    try {
+      await navigator.clipboard.writeText(html);
+      setStatus("Website HTML copied to your clipboard.");
+    } catch {
+      showError("Could not copy automatically. Your browser may block clipboard access.");
+    }
+  }
+
   function showPreview(html) {
     preview.srcdoc = html;
     previewWrap.style.display = "block";
@@ -471,6 +515,8 @@
 
   buildBtn.addEventListener("click", buildWithAI);
   saveProjectBtn.addEventListener("click", saveCurrentProject);
+  downloadHtmlBtn.addEventListener("click", downloadHtml);
+  copyHtmlBtn.addEventListener("click", copyHtml);
   newProjectBtn.addEventListener("click", clearProjectMemory);
   promptInput.addEventListener("keydown", (event) => {
     if ((event.ctrlKey || event.metaKey) && event.key === "Enter") buildWithAI();
