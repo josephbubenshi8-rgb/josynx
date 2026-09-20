@@ -166,7 +166,7 @@
   .features h3 { margin: 0 0 8px; font-size: 1.05rem; }
   .features p { margin: 0; color: var(--muted); font-size: 0.9rem; }
 </style>
-</head>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>\n</head>
 <body>
 
 <header>
@@ -203,6 +203,7 @@
       <div class="export-actions">
         <button id="downloadHtmlBtn" class="export-btn" type="button">⬇️ Download HTML</button>
         <button id="copyHtmlBtn" class="export-btn" type="button">📋 Copy HTML</button>
+        <button id="downloadZipBtn" class="export-btn" type="button">📦 Download ZIP</button>
       </div>
       <iframe id="preview" title="Generated website preview" sandbox="allow-scripts allow-forms allow-popups allow-modals"></iframe>
     </div>
@@ -237,6 +238,7 @@
   const openNewTab = document.getElementById("openNewTab");
   const downloadHtmlBtn = document.getElementById("downloadHtmlBtn");
   const copyHtmlBtn = document.getElementById("copyHtmlBtn");
+  const downloadZipBtn = document.getElementById("downloadZipBtn");
   const memoryStatus = document.getElementById("memoryStatus");
   const projectList = document.getElementById("projectList");
   const saveProjectBtn = document.getElementById("saveProjectBtn");
@@ -398,6 +400,44 @@
     errorBox.textContent = "";
   }
 
+  function sanitizeFileName(value) {
+    return value.replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "").toLowerCase();
+  }
+
+  async function downloadZip() {
+    const html = getCurrentHtml();
+    if (!html) { showError("Build or open a project first, then export it."); return; }
+
+    if (typeof JSZip === "undefined") {
+      showError("ZIP export library is still loading. Please try again in a moment.");
+      return;
+    }
+
+    try {
+      setStatus("Preparing your ZIP package…");
+      const zip = new JSZip();
+      zip.file("index.html", html);
+      zip.file("README.txt",
+        "JOSYNX Website Export\\n\\n" +
+        "Open index.html in a browser to preview your website.\\n" +
+        "This package was exported from JOSYNX.\\n"
+      );
+
+      const blob = await zip.generateAsync({ type: "blob" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = (sanitizeFileName(promptInput.value.trim()) || "josynx-website") + ".zip";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setStatus("ZIP website package downloaded to your device.");
+    } catch (err) {
+      showError("ZIP export failed: " + (err && err.message ? err.message : "Unknown error."));
+    }
+  }
+
   function getCurrentHtml() {
     return preview.srcdoc || "";
   }
@@ -517,6 +557,7 @@
   saveProjectBtn.addEventListener("click", saveCurrentProject);
   downloadHtmlBtn.addEventListener("click", downloadHtml);
   copyHtmlBtn.addEventListener("click", copyHtml);
+  downloadZipBtn.addEventListener("click", downloadZip);
   newProjectBtn.addEventListener("click", clearProjectMemory);
   promptInput.addEventListener("keydown", (event) => {
     if ((event.ctrlKey || event.metaKey) && event.key === "Enter") buildWithAI();
