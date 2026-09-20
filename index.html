@@ -293,6 +293,7 @@
         <button id="downloadHtmlBtn" class="export-btn" type="button">⬇️ Download HTML</button>
         <button id="copyHtmlBtn" class="export-btn" type="button">📋 Copy HTML</button>
         <button id="downloadZipBtn" class="export-btn" type="button">📦 Download ZIP</button>
+        <button id="multiPageBtn" class="export-btn" type="button" disabled>🗂️ Build Multi-Page ZIP</button>
       </div>
       <div class="preview-stage">
         <div id="previewFrame" class="preview-frame">
@@ -336,6 +337,7 @@
   const downloadHtmlBtn = document.getElementById("downloadHtmlBtn");
   const copyHtmlBtn = document.getElementById("copyHtmlBtn");
   const downloadZipBtn = document.getElementById("downloadZipBtn");
+  const multiPageBtn = document.getElementById("multiPageBtn");
   const memoryStatus = document.getElementById("memoryStatus");
   const projectList = document.getElementById("projectList");
   const saveProjectBtn = document.getElementById("saveProjectBtn");
@@ -929,6 +931,7 @@
   downloadHtmlBtn.addEventListener("click", downloadHtml);
   copyHtmlBtn.addEventListener("click", copyHtml);
   downloadZipBtn.addEventListener("click", downloadZip);
+  multiPageBtn.addEventListener("click", buildMultiPageProject);
   newProjectBtn.addEventListener("click", clearProjectMemory);
   promptInput.addEventListener("keydown", (event) => {
     if ((event.ctrlKey || event.metaKey) && event.key === "Enter") buildWithAI();
