@@ -260,6 +260,7 @@
         <div class="brain-actions">
           <button id="analyzeBtn" class="brain-btn" type="button" disabled>🧠 Analyze Project</button>
           <button id="improveBtn" class="brain-btn primary" type="button" disabled>✨ Make It Better</button>
+          <button id="agentBtn" class="brain-btn" type="button" disabled>🤖 Ask Agent</button>
         </div>
       </div>
       <div id="brainContent" class="brain-empty">Build or open a website, then analyze it to create its Project Brain.</div>
@@ -341,6 +342,7 @@
   const analyzeBtn = document.getElementById("analyzeBtn");
   const improveBtn = document.getElementById("improveBtn");
   const brainContent = document.getElementById("brainContent");
+  const agentBtn = document.getElementById("agentBtn");
 
   function loadProjectMemory() {
     try {
@@ -503,6 +505,7 @@
       brainContent.innerHTML = '<div class="brain-empty">Build or open a website, then analyze it to create its Project Brain.</div>';
       analyzeBtn.disabled = !getCurrentHtml();
       improveBtn.disabled = !getCurrentHtml();
+      agentBtn.disabled = !getCurrentHtml();
       return;
     }
     const design = brain.design || {};
@@ -522,6 +525,7 @@
       (lastAgentChanges.length ? '<div class="brain-changes"><div class="brain-label">Latest AI changes</div>' + renderList(lastAgentChanges, "No changes reported") + '</div>' : '');
     analyzeBtn.disabled = !getCurrentHtml();
     improveBtn.disabled = !getCurrentHtml();
+    agentBtn.disabled = !getCurrentHtml();
   }
 
   async function runProjectAgent(task) {
@@ -529,9 +533,23 @@
     clearError();
     if (!html) { showError("Build or open a website first."); return; }
 
+    let agentTask = task;
+    if (task === "CUSTOM") {
+      agentTask = promptInput.value.trim();
+      if (!agentTask) {
+        showError("Tell the JOSYNX Agent what you want it to build or change.");
+        return;
+      }
+      if (agentTask.length > 4000) {
+        showError("Your Agent instruction is too long. Please keep it under 4000 characters.");
+        return;
+      }
+    }
+
     analyzeBtn.disabled = true;
     improveBtn.disabled = true;
-    setStatus(task === "MAKE_BETTER" ? "JOSYNX is analyzing the website and improving it…" : "JOSYNX is building your Project Brain…");
+    agentBtn.disabled = true;
+    setStatus(task === "MAKE_BETTER" ? "JOSYNX is analyzing the website and improving it…" : task === "CUSTOM" ? "JOSYNX Agent is working on your instruction…" : "JOSYNX is building your Project Brain…");
 
     try {
       const response = await fetch(API_BASE + "/api/agent", {
@@ -539,7 +557,7 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           html,
-          task,
+          task: agentTask,
           brain: activeProjectBrain || null
         })
       });
@@ -570,7 +588,10 @@
       renderBrain(activeProjectBrain);
       setStatus(task === "MAKE_BETTER"
         ? "JOSYNX improved the website and updated its Project Brain."
-        : "Project Brain created. JOSYNX now understands this website.");
+        : task === "CUSTOM"
+          ? "JOSYNX Agent completed your instruction and updated the project."
+          : "Project Brain created. JOSYNX now understands this website.");
+      if (task === "CUSTOM") promptInput.value = "";
     } catch (err) {
       setStatus("");
       showError("Project Agent failed: " + (err && err.message ? err.message : "Unknown error. Check your connection and try again."));
@@ -855,6 +876,7 @@
 
   analyzeBtn.addEventListener("click", () => runProjectAgent("ANALYZE"));
   improveBtn.addEventListener("click", () => runProjectAgent("MAKE_BETTER"));
+  agentBtn.addEventListener("click", () => runProjectAgent("CUSTOM"));
   buildBtn.addEventListener("click", buildWithAI);
   editBtn.addEventListener("click", editCurrentSite);
   saveProjectBtn.addEventListener("click", saveCurrentProject);
