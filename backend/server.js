@@ -260,11 +260,7 @@ function extractHtml(responseBody) {
 
   text = text.trim();
 
-  const fenceMatch = text.match(
-    /\`\`\`(?:html)?\\s*([\\s\\S]*?)\`\`\`/i
-  );
-
-  if (fenceMatch) {
+  const fenceMatch = text.match(/```(?:html)?\s*([\s\S]*?)```/i);\n\n  if (fenceMatch) {
     text = fenceMatch[1].trim();
   }
 
