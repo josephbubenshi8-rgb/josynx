@@ -284,6 +284,7 @@ Architecture rules:
     return res.json({
       html: returnedHtml || html,
       brain: result.brain,
+      architecture: result.architecture && typeof result.architecture === "object" ? result.architecture : (architecture || null),
       changes: Array.isArray(result.changes) ? result.changes.slice(0, 12) : []
     });
   } catch (err) {
