@@ -399,6 +399,8 @@
   let activeFilePath = null;
   let lastValidation = null;
   let lastSnapshot = null;
+  let snapshotHistory = [];
+  const MAX_SNAPSHOT_HISTORY = 8;
   const autoFixBtn = document.getElementById("autoFixBtn");
   const undoBtn = document.getElementById("undoBtn");
 
@@ -437,6 +439,7 @@
     previewWrap.style.display = "none";
     currentProjectIndex = null;
     lastSnapshot = null;
+    snapshotHistory = [];
     undoBtn.disabled = true;
     activeProjectBrain = null;
     activeProjectArchitecture = null;
@@ -1006,6 +1009,8 @@
       memory: [...projectMemory],
       timestamp: Date.now()
     };
+    snapshotHistory.push(lastSnapshot);
+    snapshotHistory = snapshotHistory.slice(-MAX_SNAPSHOT_HISTORY);
     undoBtn.disabled = false;
   }
 
@@ -1015,7 +1020,8 @@
       return;
     }
     const snapshot = lastSnapshot;
-    lastSnapshot = null;
+    snapshotHistory = snapshotHistory.filter(item => item !== snapshot);
+    lastSnapshot = snapshotHistory.length ? snapshotHistory[snapshotHistory.length - 1] : null;
     activeProjectFiles = snapshot.files ? JSON.parse(JSON.stringify(snapshot.files)) : null;
     activeFilePath = snapshot.activeFile || null;
     activeProjectBrain = snapshot.brain ? JSON.parse(JSON.stringify(snapshot.brain)) : null;
@@ -1044,7 +1050,7 @@
     if (validateBtn) validateBtn.disabled = !html;
     if (autoFixBtn) autoFixBtn.disabled = true;
     setStatus("↩️ Restored the previous version: " + snapshot.label);
-    undoBtn.disabled = true;
+    undoBtn.disabled = !lastSnapshot;
   }
 
   function setStatus(msg) {
@@ -1258,6 +1264,7 @@
       showPreview(data.html);
       currentProjectIndex = null;
       lastSnapshot = null;
+      snapshotHistory = [];
       undoBtn.disabled = true;
       activeProjectBrain = null;
       activeProjectArchitecture = null;
