@@ -271,6 +271,16 @@
       return;
     }
 
+    if (prompt.length > 4000) {
+      showError("Your instruction is too long. Please keep it under 4000 characters.");
+      return;
+    }
+
+    const memoryContext = projectMemory.length
+      ? "You are continuing an existing JOSYNX website project. Preserve previous requirements unless the latest instruction changes them. Treat the latest instruction as an update to the same website.\n\nExisting project memory:\n" + projectMemory.map((item, i) => (i + 1) + ". " + item).join("\n") + "\n\nLatest user instruction:\n"
+      : "";
+    const combinedPrompt = (memoryContext + prompt).slice(-3900);
+
     buildBtn.disabled = true;
     previewWrap.style.display = "none";
     setStatus("Generating your website… this can take up to a minute.");
@@ -279,7 +289,7 @@
       const response = await fetch(`${API_BASE}/api/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt })
+        body: JSON.stringify({ prompt: combinedPrompt })
       });
 
       let data;
@@ -305,8 +315,11 @@
         throw new Error("Server did not return any HTML to preview.");
       }
 
-      setStatus("Done. Here's your generated website:");
+      setStatus(projectMemory.length ? "Updated your existing project with the latest instruction." : "Done. Your project has been started.");
       showPreview(data.html);
+      projectMemory.push(prompt.replace(/\s+/g, " ").trim().slice(0, MAX_MEMORY_ENTRY_LENGTH));
+      projectMemory = projectMemory.slice(-MAX_MEMORY_ITEMS);
+      saveProjectMemory();
     } catch (err) {
       setStatus("");
       showError(
@@ -319,6 +332,10 @@
   }
 
   buildBtn.addEventListener("click", buildWithAI);
+  newProjectBtn.addEventListener("click", clearProjectMemory);
+  promptInput.addEventListener("keydown", (event) => {
+    if ((event.ctrlKey || event.metaKey) && event.key === "Enter") buildWithAI();
+  });
 </script>
 
 </body>
