@@ -309,7 +309,7 @@
       <div class="validator-panel">
         <div class="validator-head">
           <div><h3>🛡️ Project Validator</h3><div class="brain-subtitle">Check your project before exporting: links, files, IDs, navigation and basic mobile readiness.</div></div>
-          <div class="validator-actions"><button id="validateBtn" class="validator-btn primary" type="button" disabled>🛡️ Validate Project</button></div>
+          <div class="validator-actions"><button id="validateBtn" class="validator-btn primary" type="button" disabled>🛡️ Validate Project</button><button id="autoFixBtn" class="validator-btn" type="button" disabled>🛠️ Auto-Fix Issues</button></div>
         </div>
         <div id="validatorContent" class="architecture-empty">Build or open a website, then validate it before export.</div>
       </div>
@@ -397,6 +397,8 @@
   let lastAgentChanges = [];
   let activeProjectFiles = null;
   let activeFilePath = null;
+  let lastValidation = null;
+  const autoFixBtn = document.getElementById("autoFixBtn");
 
   const analyzeBtn = document.getElementById("analyzeBtn");
   const improveBtn = document.getElementById("improveBtn");
@@ -886,6 +888,105 @@
     return lastValidation;
   }
 
+  async function autoFixValidation() {
+    clearError();
+    if (!lastValidation) {
+      showError("Validate the project first so JOSYNX knows what needs fixing.");
+      return;
+    }
+    const actionable = (lastValidation.issues || []).filter(item => item.severity === "error" || item.severity === "warning");
+    if (!actionable.length) {
+      setStatus("No validator issues need fixing.");
+      return;
+    }
+
+    const html = getCurrentHtml();
+    if (!html && !activeProjectFiles) {
+      showError("Build or open a project first.");
+      return;
+    }
+
+    const report = actionable.map((item, index) =>
+      (index + 1) + ". [" + item.severity.toUpperCase() + "] " +
+      (item.file ? item.file + ": " : "") + item.message
+    ).join("\n");
+
+    autoFixBtn.disabled = true;
+    validateBtn.disabled = true;
+    setStatus("🛠️ JOSYNX Agent is fixing the validator issues…");
+    try {
+      const task =
+        "Fix ONLY the actionable issues found by the JOSYNX Project Validator. " +
+        "Work across all affected files when needed. Preserve the existing design, content, structure, " +
+        "and unrelated functionality. Do not redesign the site or add unrelated features. " +
+        "Make the smallest reliable changes needed to resolve the reported issues, then mentally revalidate the project. " +
+        "Return the complete updated project files.\n\nVALIDATOR REPORT:\n" + report;
+
+      const response = await fetch(API_BASE + "/api/agent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          html: html || "",
+          task,
+          brain: activeProjectBrain || null,
+          architecture: activeProjectArchitecture || null,
+          files: activeProjectFiles || null,
+          activeFile: activeFilePath || null
+        })
+      });
+
+      let data;
+      try { data = await response.json(); }
+      catch { throw new Error("Server returned an unreadable response (HTTP " + response.status + ")."); }
+
+      if (!response.ok) {
+        const parts = [data && data.error, data && data.details, data && data.type].filter(Boolean);
+        throw new Error(parts.length ? parts.join(" — ") : "Auto-fix failed (HTTP " + response.status + ").");
+      }
+
+      if (data.files && typeof data.files === "object") {
+        activeProjectFiles = data.files;
+        activeFilePath = data.activeFile || (activeProjectFiles["index.html"] ? "index.html" : Object.keys(activeProjectFiles)[0] || null);
+        renderProjectFiles(activeProjectFiles);
+      }
+      if (data.html) {
+        if (!activeProjectFiles || !Object.keys(activeProjectFiles).length) {
+          activeProjectFiles = { "index.html": data.html };
+          activeFilePath = "index.html";
+          renderProjectFiles(activeProjectFiles);
+        }
+        showPreview(data.html);
+      } else if (activeFilePath && activeProjectFiles && activeProjectFiles[activeFilePath]) {
+        showPreview(activeProjectFiles[activeFilePath]);
+      } else if (activeProjectFiles && activeProjectFiles["index.html"]) {
+        activeFilePath = "index.html";
+        showPreview(activeProjectFiles["index.html"]);
+      }
+
+      if (data.brain) { activeProjectBrain = data.brain; renderBrain(activeProjectBrain); }
+      if (data.architecture) { activeProjectArchitecture = data.architecture; renderArchitecture(activeProjectArchitecture); }
+      lastAgentChanges = Array.isArray(data.changes) ? data.changes : [];
+      if (currentProjectIndex !== null && savedProjects[currentProjectIndex]) {
+        savedProjects[currentProjectIndex].html = getCurrentHtml();
+        savedProjects[currentProjectIndex].brain = activeProjectBrain ? JSON.parse(JSON.stringify(activeProjectBrain)) : null;
+        savedProjects[currentProjectIndex].architecture = activeProjectArchitecture ? JSON.parse(JSON.stringify(activeProjectArchitecture)) : null;
+        savedProjects[currentProjectIndex].files = activeProjectFiles ? JSON.parse(JSON.stringify(activeProjectFiles)) : null;
+        savedProjects[currentProjectIndex].activeFile = activeFilePath || null;
+        savedProjects[currentProjectIndex].updatedAt = Date.now();
+        saveProjects();
+      }
+
+      setStatus("Auto-fix complete. Running the validator again…");
+      validateProject();
+    } catch (err) {
+      setStatus("");
+      showError("Auto-fix failed: " + (err && err.message ? err.message : "Unknown error. Check your connection and try again."));
+    } finally {
+      validateBtn.disabled = !getCurrentHtml();
+      autoFixBtn.disabled = !(lastValidation && (lastValidation.errors || lastValidation.warnings));
+    }
+  }
+
   function setStatus(msg) {
     statusEl.textContent = msg || "";
   }
@@ -1029,6 +1130,7 @@
     editBtn.disabled = false;
     analyzeBtn.disabled = false;
     if (validateBtn) validateBtn.disabled = false;
+    if (autoFixBtn) autoFixBtn.disabled = !(lastValidation && (lastValidation.errors || lastValidation.warnings));
     improveBtn.disabled = false;
     previewWrap.style.display = "block";
 
@@ -1231,6 +1333,7 @@
   multiPageBtn.addEventListener("click", buildMultiPageProject);
   newProjectBtn.addEventListener("click", clearProjectMemory);
   validateBtn.addEventListener("click", validateProject);
+  autoFixBtn.addEventListener("click", autoFixValidation);
   promptInput.addEventListener("keydown", (event) => {
     if ((event.ctrlKey || event.metaKey) && event.key === "Enter") buildWithAI();
   });
