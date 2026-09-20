@@ -88,7 +88,19 @@
     align-items: center;
     gap: 8px;
   }
-  #buildBtn:disabled { opacity: 0.6; cursor: not-allowed; }
+  #buildBtn:disabled, #editBtn:disabled { opacity: 0.6; cursor: not-allowed; }
+  .edit-btn {
+    background:#171b24;
+    color:var(--text);
+    border:1px solid var(--border);
+    padding:12px 18px;
+    border-radius:10px;
+    font-weight:700;
+    font-size:1rem;
+    cursor:pointer;
+    margin-left:8px;
+  }
+  .edit-btn:hover:not(:disabled) { background:#1c2230; }
 
   .workspace { display:grid; gap:16px; margin-bottom:24px; }
   .projects-panel { background:linear-gradient(180deg,#141821,#10131a); border:1px solid var(--border); border-radius:18px; padding:18px; box-shadow:0 12px 35px rgba(0,0,0,.18); }
@@ -190,6 +202,7 @@
     <textarea id="promptInput" placeholder="e.g. Build me a modern restaurant website"></textarea>
     <div class="builder-actions">
       <button id="buildBtn" type="button">Build with AI →</button>
+      <button id="editBtn" type="button" class="edit-btn" disabled>✏️ Edit Current Site</button>
     </div>
     <div id="status"></div>
     <div id="memoryStatus" style="margin-top:8px;font-size:0.82rem;color:var(--muted);"></div>
@@ -231,6 +244,7 @@
 
   const promptInput = document.getElementById("promptInput");
   const buildBtn = document.getElementById("buildBtn");
+  const editBtn = document.getElementById("editBtn");
   const statusEl = document.getElementById("status");
   const errorBox = document.getElementById("errorBox");
   const previewWrap = document.getElementById("previewWrap");
@@ -250,6 +264,7 @@
   const MAX_MEMORY_ITEMS = 6;
   const MAX_MEMORY_ENTRY_LENGTH = 500;
   let projectMemory = loadProjectMemory();
+  let currentProjectIndex = null;
 
   function loadProjectMemory() {
     try {
@@ -274,6 +289,7 @@
     try { localStorage.removeItem(MEMORY_KEY); } catch {}
     promptInput.value = "";
     previewWrap.style.display = "none";
+    currentProjectIndex = null;
     clearError();
     setStatus("New project started.");
     updateMemoryStatus();
@@ -379,10 +395,12 @@
   function openProject(index) {
     const project = savedProjects[index];
     if (!project) return;
+    currentProjectIndex = index;
     projectMemory = Array.isArray(project.memory) ? project.memory.slice(-MAX_MEMORY_ITEMS) : [];
     saveProjectMemory();
     showPreview(project.html);
-    setStatus("Opened \"" + project.name + "\". You can continue building it with AI.");
+    setStatus("Opened \"" + project.name + "\". You can continue building or editing it with AI.");
+    editBtn.disabled = false;
   }
 
 
@@ -476,6 +494,7 @@
 
   function showPreview(html) {
     preview.srcdoc = html;
+    editBtn.disabled = false;
     previewWrap.style.display = "block";
 
     // "Open in new tab" via a blob URL so it works without a server.
@@ -540,6 +559,7 @@
 
       setStatus(projectMemory.length ? "Updated your existing project with the latest instruction." : "Done. Your project has been started.");
       showPreview(data.html);
+      currentProjectIndex = null;
       projectMemory.push(prompt.replace(/\s+/g, " ").trim().slice(0, MAX_MEMORY_ENTRY_LENGTH));
       projectMemory = projectMemory.slice(-MAX_MEMORY_ITEMS);
       saveProjectMemory();
@@ -554,7 +574,73 @@
     }
   }
 
+
+  async function editCurrentSite() {
+    const instruction = promptInput.value.trim();
+    const html = getCurrentHtml();
+    clearError();
+
+    if (!html) {
+      showError("Build or open a project first, then describe the change you want.");
+      return;
+    }
+    if (!instruction) {
+      showError("Tell JOSYNX what you want to change in the current website.");
+      return;
+    }
+    if (instruction.length > 4000) {
+      showError("Your edit instruction is too long. Please keep it under 4000 characters.");
+      return;
+    }
+
+    buildBtn.disabled = true;
+    editBtn.disabled = true;
+    setStatus("Editing your current website… this can take up to a minute.");
+
+    try {
+      const response = await fetch(API_BASE + "/api/edit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ html, instruction })
+      });
+
+      let data;
+      try { data = await response.json(); }
+      catch { throw new Error("Server returned an unreadable response (HTTP " + response.status + ")."); }
+
+      if (!response.ok) {
+        const parts = [data && data.error, data && data.details, data && data.type].filter(Boolean);
+        throw new Error(parts.length ? parts.join(" — ") : "Edit failed (HTTP " + response.status + ").");
+      }
+      if (!data.html) throw new Error("Server did not return updated HTML.");
+
+      showPreview(data.html);
+      const memoryEntry = "Edit: " + instruction.replace(/\s+/g, " ").trim();
+      projectMemory.push(memoryEntry.slice(0, MAX_MEMORY_ENTRY_LENGTH));
+      projectMemory = projectMemory.slice(-MAX_MEMORY_ITEMS);
+      saveProjectMemory();
+
+      if (currentProjectIndex !== null && savedProjects[currentProjectIndex]) {
+        savedProjects[currentProjectIndex].html = data.html;
+        savedProjects[currentProjectIndex].memory = [...projectMemory];
+        savedProjects[currentProjectIndex].updatedAt = Date.now();
+        saveProjects();
+        setStatus("Current project updated and saved automatically.");
+      } else {
+        setStatus("Current website updated. Save Project to keep this version on your device.");
+      }
+      promptInput.value = "";
+    } catch (err) {
+      setStatus("");
+      showError("Edit failed: " + (err && err.message ? err.message : "Unknown error. Check your connection and try again."));
+    } finally {
+      buildBtn.disabled = false;
+      editBtn.disabled = !getCurrentHtml();
+    }
+  }
+
   buildBtn.addEventListener("click", buildWithAI);
+  editBtn.addEventListener("click", editCurrentSite);
   saveProjectBtn.addEventListener("click", saveCurrentProject);
   downloadHtmlBtn.addEventListener("click", downloadHtml);
   copyHtmlBtn.addEventListener("click", copyHtml);
