@@ -224,6 +224,26 @@
   .file-item:hover, .file-item.active { background:#1a2030; border-color:#3a4050; }
   .file-item strong { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .file-item small { color:var(--muted); display:block; margin-top:4px; }
+
+  .validator-panel { margin-top:14px; border:1px solid var(--border); border-radius:14px; padding:14px; background:#0e1219; }
+  .validator-head { display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:10px; }
+  .validator-head h3 { margin:0; font-size:.95rem; }
+  .validator-actions { display:flex; gap:8px; flex-wrap:wrap; }
+  .validator-btn { border:1px solid var(--border); background:#171b24; color:var(--text); padding:8px 11px; border-radius:8px; cursor:pointer; font-weight:700; }
+  .validator-btn.primary { background:linear-gradient(135deg,var(--accent),var(--accent2)); border:none; }
+  .validator-btn:disabled { opacity:.55; cursor:not-allowed; }
+  .validator-summary { display:grid; grid-template-columns:repeat(auto-fit,minmax(110px,1fr)); gap:8px; margin-top:10px; }
+  .validator-stat { border:1px solid var(--border); border-radius:10px; padding:10px; background:#11151d; }
+  .validator-stat strong { display:block; font-size:1.05rem; }
+  .validator-stat small { color:var(--muted); }
+  .validator-health { margin-top:10px; padding:10px 12px; border:1px solid var(--border); border-radius:10px; background:#11151d; font-weight:700; }
+  .validator-list { margin-top:10px; display:grid; gap:7px; }
+  .validator-item { border:1px solid var(--border); border-radius:9px; padding:9px 10px; background:#10141c; font-size:.84rem; line-height:1.4; }
+  .validator-item.error { border-color:#8f3d3d; }
+  .validator-item.warning { border-color:#7b6532; }
+  .validator-item.pass { border-color:#356b4a; }
+  .validator-item small { display:block; color:var(--muted); margin-top:3px; }
+
   .features {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -285,6 +305,15 @@
         <div class="architecture-head"><h3>🗺️ Project Architecture</h3><span class="brain-subtitle">Pages, routes and shared structure</span></div>
         <div id="architectureContent" class="architecture-empty">Analyze the project to map its website architecture.</div>
       </div>
+
+      <div class="validator-panel">
+        <div class="validator-head">
+          <div><h3>🛡️ Project Validator</h3><div class="brain-subtitle">Check your project before exporting: links, files, IDs, navigation and basic mobile readiness.</div></div>
+          <div class="validator-actions"><button id="validateBtn" class="validator-btn primary" type="button" disabled>🛡️ Validate Project</button></div>
+        </div>
+        <div id="validatorContent" class="architecture-empty">Build or open a website, then validate it before export.</div>
+      </div>
+
       <div class="file-workspace">
         <div class="file-workspace-head"><h3>🗂️ Project Files</h3><span id="fileCount" class="file-count">No generated files yet</span></div><div id="fileSelectionStatus" class="file-count" style="margin:-2px 0 10px;">No file selected — the Agent can work across the whole project.</div>
         <div id="fileTree" class="file-tree"><div class="architecture-empty">Build a multi-page project to create a real project file set.</div></div>
@@ -375,6 +404,9 @@
   const architectureContent = document.getElementById("architectureContent");
   const agentBtn = document.getElementById("agentBtn");
   const fileSelectionStatus = document.getElementById("fileSelectionStatus");
+  const validateBtn = document.getElementById("validateBtn");
+  const validatorContent = document.getElementById("validatorContent");
+  let lastValidation = null;
 
   function loadProjectMemory() {
     try {
@@ -407,6 +439,8 @@
     activeFilePath = null;
     renderArchitecture(null);
     renderProjectFiles(null);
+    if (validatorContent) validatorContent.innerHTML = '<div class="architecture-empty">Build or open a website, then validate it before export.</div>';
+    if (validateBtn) validateBtn.disabled = true;
     renderBrain(null);
     clearError();
     setStatus("New project started.");
@@ -417,6 +451,7 @@
   renderProjects();
   renderArchitecture(null);
   renderProjectFiles(null);
+  if (validateBtn) validateBtn.disabled = !getCurrentHtml();
 
   function loadProjects() {
     try {
@@ -590,6 +625,7 @@
       analyzeBtn.disabled = !getCurrentHtml();
       improveBtn.disabled = !getCurrentHtml();
       agentBtn.disabled = !getCurrentHtml();
+      if (validateBtn) validateBtn.disabled = !getCurrentHtml();
       return;
     }
     const design = brain.design || {};
@@ -610,6 +646,7 @@
     analyzeBtn.disabled = !getCurrentHtml();
     improveBtn.disabled = !getCurrentHtml();
     agentBtn.disabled = !getCurrentHtml();
+    if (validateBtn) validateBtn.disabled = !getCurrentHtml();
   }
 
   function renderArchitecture(architecture) {
@@ -722,6 +759,131 @@
       analyzeBtn.disabled = !getCurrentHtml();
       improveBtn.disabled = !getCurrentHtml();
     }
+  }
+
+
+  function validateProject() {
+    clearError();
+    const files = activeProjectFiles && typeof activeProjectFiles === "object"
+      ? activeProjectFiles
+      : (getCurrentHtml() ? { "index.html": getCurrentHtml() } : null);
+    if (!files) { showError("Build or open a website first."); return; }
+
+    const paths = Object.keys(files);
+    const htmlPaths = paths.filter(p => /\.html?$/i.test(p));
+    const pathSet = new Set(paths.map(p => p.replace(/^\.\//, "")));
+    const issues = [];
+    const passes = [];
+    const add = (severity, message, file) => issues.push({ severity, message, file: file || "" });
+
+    if (!htmlPaths.length) add("error", "No HTML page was found in the project.");
+    if (!pathSet.has("index.html")) add("error", "index.html is missing from the project.");
+    else passes.push("index.html is present.");
+
+    const normalizeTarget = (target, fromFile) => {
+      try {
+        const clean = target.split("#")[0].split("?")[0].trim();
+        if (!clean || clean === "#" || /^(https?:|mailto:|tel:|javascript:|data:)/i.test(clean)) return null;
+        const base = fromFile.split("/");
+        base.pop();
+        const joined = (base.length ? base.join("/") + "/" : "") + clean.replace(/^\//, "");
+        const parts = [];
+        joined.split("/").forEach(part => {
+          if (!part || part === ".") return;
+          if (part === "..") parts.pop(); else parts.push(part);
+        });
+        return parts.join("/");
+      } catch { return null; }
+    };
+
+    htmlPaths.forEach(file => {
+      const source = String(files[file] || "");
+      const doc = new DOMParser().parseFromString(source, "text/html");
+      if (!/<html[\s>]/i.test(source)) add("warning", "Document does not contain a clear <html> element.", file);
+
+      const viewport = doc.querySelector('meta[name="viewport"]');
+      if (!viewport) add("warning", "Missing responsive viewport meta tag.", file);
+      else passes.push(file + " has a responsive viewport.");
+
+      const ids = new Map();
+      doc.querySelectorAll("[id]").forEach(el => {
+        const id = el.getAttribute("id");
+        if (!id) return;
+        ids.set(id, (ids.get(id) || 0) + 1);
+      });
+      ids.forEach((count, id) => {
+        if (count > 1) add("error", 'Duplicate id "' + id + '" appears ' + count + " times.", file);
+      });
+      if (![...ids.values()].some(v => v > 1)) passes.push(file + " has no duplicate IDs.");
+
+      doc.querySelectorAll("a[href]").forEach(a => {
+        const href = a.getAttribute("href") || "";
+        const target = normalizeTarget(href, file);
+        if (!target) {
+          if (/^#?$/.test(href.trim())) add("warning", "Empty/placeholder link found.", file);
+          return;
+        }
+        if (/\.html?$/i.test(target) && !pathSet.has(target)) add("error", 'Broken page link to "' + target + '".', file);
+      });
+
+      doc.querySelectorAll('script[src], link[href]').forEach(el => {
+        const attr = el.tagName.toLowerCase() === "script" ? "src" : "href";
+        const value = el.getAttribute(attr) || "";
+        const target = normalizeTarget(value, file);
+        if (!target) return;
+        if (/\.(css|js)$/i.test(target) && !pathSet.has(target)) add("error", 'Missing referenced file "' + target + '".', file);
+      });
+
+      const navLinks = [...doc.querySelectorAll("nav a[href]")].map(a => normalizeTarget(a.getAttribute("href") || "", file)).filter(Boolean);
+      if (navLinks.length) {
+        navLinks.forEach(target => {
+          if (!pathSet.has(target) && /\.html?$/i.test(target)) add("error", 'Navigation points to missing page "' + target + '".', file);
+        });
+      }
+
+      const buttons = [...doc.querySelectorAll("button")];
+      const suspiciousButtons = buttons.filter(b => !b.getAttribute("onclick") && !b.closest("form") && !b.closest("[data-action]"));
+      if (suspiciousButtons.length) add("warning", suspiciousButtons.length + " button(s) have no obvious inline/form action; verify they are wired by JavaScript.", file);
+
+      const forms = [...doc.querySelectorAll("form")];
+      forms.forEach(form => {
+        if (!form.getAttribute("action") && !form.querySelector('button[type="button"]')) add("warning", "Form has no action attribute; verify JavaScript handles submission.", file);
+      });
+    });
+
+    const allText = htmlPaths.map(p => String(files[p] || "")).join("\n");
+    if (/<script[^>]+src=["']https?:\/\//i.test(allText) || /<link[^>]+href=["']https?:\/\//i.test(allText)) {
+      add("warning", "External CSS/JavaScript dependency detected. Standalone exports may not work offline.");
+    } else passes.push("No external CSS/JavaScript URLs detected.");
+
+    const unique = [];
+    const seen = new Set();
+    issues.forEach(item => {
+      const key = item.severity + "|" + item.message + "|" + item.file;
+      if (!seen.has(key)) { seen.add(key); unique.push(item); }
+    });
+
+    const errors = unique.filter(i => i.severity === "error");
+    const warnings = unique.filter(i => i.severity === "warning");
+    const checks = errors.length + warnings.length + passes.length;
+    const health = checks ? Math.max(0, Math.round(((checks - errors.length - warnings.length * 0.5) / checks) * 100)) : 0;
+    lastValidation = { timestamp: Date.now(), files: paths.length, errors: errors.length, warnings: warnings.length, passed: passes.length, health, issues: unique };
+
+    const itemHtml = unique.map(i => '<div class="validator-item ' + i.severity + '">' +
+      (i.severity === "error" ? "❌ " : "⚠️ ") + escapeHtml(i.message) +
+      (i.file ? '<small>File: ' + escapeHtml(i.file) + '</small>' : '') + '</div>').join("");
+    const passHtml = passes.slice(0, 20).map(p => '<div class="validator-item pass">✅ ' + escapeHtml(p) + '</div>').join("");
+    validatorContent.innerHTML =
+      '<div class="validator-summary">' +
+        '<div class="validator-stat"><strong>' + errors.length + '</strong><small>Errors</small></div>' +
+        '<div class="validator-stat"><strong>' + warnings.length + '</strong><small>Warnings</small></div>' +
+        '<div class="validator-stat"><strong>' + passes.length + '</strong><small>Passed</small></div>' +
+        '<div class="validator-stat"><strong>' + paths.length + '</strong><small>Files checked</small></div>' +
+      '</div>' +
+      '<div class="validator-health">🟢 Project Health: ' + health + '%</div>' +
+      '<div class="validator-list">' + (itemHtml || '') + passHtml + '</div>';
+    setStatus(errors.length ? "Project validation found " + errors.length + " error(s) and " + warnings.length + " warning(s)." : "Project validation complete — no blocking errors found.");
+    return lastValidation;
   }
 
   function setStatus(msg) {
@@ -866,6 +1028,7 @@
     preview.srcdoc = html;
     editBtn.disabled = false;
     analyzeBtn.disabled = false;
+    if (validateBtn) validateBtn.disabled = false;
     improveBtn.disabled = false;
     previewWrap.style.display = "block";
 
@@ -940,6 +1103,7 @@
       renderBrain(null);
       renderArchitecture(null);
       renderProjectFiles(null);
+      if (validateBtn) validateBtn.disabled = false;
       projectMemory.push(prompt.replace(/\s+/g, " ").trim().slice(0, MAX_MEMORY_ENTRY_LENGTH));
       projectMemory = projectMemory.slice(-MAX_MEMORY_ITEMS);
       saveProjectMemory();
@@ -1066,6 +1230,7 @@
   downloadZipBtn.addEventListener("click", downloadZip);
   multiPageBtn.addEventListener("click", buildMultiPageProject);
   newProjectBtn.addEventListener("click", clearProjectMemory);
+  validateBtn.addEventListener("click", validateProject);
   promptInput.addEventListener("keydown", (event) => {
     if ((event.ctrlKey || event.metaKey) && event.key === "Enter") buildWithAI();
   });
